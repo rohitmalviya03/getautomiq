@@ -1,0 +1,119 @@
+# Local development / staging orchestration for the whole Growasy polyrepo.
+# Production deploys the frontend separately (static hosting/CDN) and runs
+# growasy-api / growasy-worker as independently scaled containers behind a
+# load balancer — this compose file is not the production topology, it's the
+# fastest way to run the entire stack on one machine.
+#
+# Usage:
+#   cp .env.example .env   (edit secrets)
+#   docker compose up --build
+
+name: growasy
+
+services:
+  mysql:
+    # 5.6, not the newer default — matches the production target. See the MySQL 5.6
+    # compatibility note at the top of growasy-api/prisma/schema.prisma.
+    image: mysql:5.6
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-growasy}
+      MYSQL_USER: ${MYSQL_USER:-growasy}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-growasy}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-p${MYSQL_ROOT_PASSWORD:-root}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Local outbound-mail catcher — growasy-worker sends verification/reset emails
+  # here in dev instead of a real SMTP provider. Web UI at http://localhost:8025.
+  mailhog:
+    image: mailhog/mailhog
+    restart: unless-stopped
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+  api:
+    build:
+      context: ../growasy-api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../growasy-api/.env
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-growasy}:${MYSQL_PASSWORD:-growasy}@mysql:3306/${MYSQL_DATABASE:-growasy}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - '4000:4000'
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && node dist/main.js"
+
+  worker:
+    build:
+      context: ../growasy-worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../growasy-worker/.env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+    ports:
+      - '4100:4100'
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../growasy-web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    restart: unless-stopped
+    ports:
+      - '5173:80'
+    depends_on:
+      - api
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    volumes:
+      - ./nginx/local.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - web
+
+volumes:
+  mysql_data:
+  redis_data:

@@ -1,0 +1,105 @@
+import { useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { setUnauthorizedHandler } from '@/lib/api-client';
+import { useBootstrapAuth } from '@/hooks/use-bootstrap-auth';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { PublicOnlyRoute } from '@/components/auth/PublicOnlyRoute';
+import { FullPageSpinner } from '@/components/ui/FullPageSpinner';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { LandingPage } from '@/pages/LandingPage';
+import { LoginPage } from '@/pages/auth/LoginPage';
+import { RegisterPage } from '@/pages/auth/RegisterPage';
+import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
+import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
+import { DashboardHome } from '@/pages/dashboard/DashboardHome';
+import { ProfilePage } from '@/pages/dashboard/ProfilePage';
+import { SessionsPage } from '@/pages/dashboard/SessionsPage';
+import { OrganizationPage } from '@/pages/dashboard/OrganizationPage';
+import { InstagramAccountsPage } from '@/pages/dashboard/InstagramAccountsPage';
+import { InstagramCallbackPage } from '@/pages/dashboard/InstagramCallbackPage';
+import { AutomationsPage } from '@/pages/dashboard/AutomationsPage';
+import { ContentPage } from '@/pages/dashboard/ContentPage';
+import { ContactsPage } from '@/pages/dashboard/ContactsPage';
+import { AnalyticsPage } from '@/pages/dashboard/AnalyticsPage';
+import { LinksPage } from '@/pages/dashboard/LinksPage';
+import { ToolsPage } from '@/pages/dashboard/ToolsPage';
+import { BillingPage } from '@/pages/dashboard/BillingPage';
+import { NotFoundPage } from '@/pages/NotFoundPage';
+
+const PUBLIC_PATH_PREFIXES = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+];
+
+export function App() {
+  const ready = useBootstrapAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Wired once so the api-client (which lives outside the React tree) can
+  // send the user to /login after a hard auth failure (refresh also failed).
+  // Skipped on already-public routes so a cold visit to e.g. /register isn't
+  // hijacked by the background bootstrap probe's inevitable 401.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      // The landing page ('/') is public too — its bootstrap 401 must not bounce
+      // a logged-out visitor to /login. Match it exactly (a prefix of '/' would
+      // match every route).
+      const isPublic =
+        location.pathname === '/' ||
+        PUBLIC_PATH_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
+      if (!isPublic) {
+        navigate('/login', { replace: true });
+      }
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [navigate, location.pathname]);
+
+  if (!ready) {
+    return <FullPageSpinner />;
+  }
+
+  return (
+    <Routes>
+      {/* Public marketing home — anyone can see it, logged in or not. */}
+      <Route path="/" element={<LandingPage />} />
+
+      <Route element={<PublicOnlyRoute />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+      </Route>
+
+      {/* Reachable regardless of auth state: verification links may be opened
+          while logged out, and the page itself offers a logged-in resend action. */}
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<DashboardLayout />}>
+          <Route path="/dashboard" element={<DashboardHome />} />
+          <Route path="/instagram/accounts" element={<InstagramAccountsPage />} />
+          <Route path="/automations" element={<AutomationsPage />} />
+          <Route path="/content" element={<ContentPage />} />
+          <Route path="/contacts" element={<ContactsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/links" element={<LinksPage />} />
+          <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/billing" element={<BillingPage />} />
+          {/* META_REDIRECT_URI points at exactly this path — do not rename. */}
+          <Route path="/settings/instagram/callback" element={<InstagramCallbackPage />} />
+          <Route path="/settings" element={<ProfilePage />} />
+          <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/organization" element={<OrganizationPage />} />
+        </Route>
+      </Route>
+
+      <Route path="/404" element={<NotFoundPage />} />
+      <Route path="*" element={<Navigate to="/404" replace />} />
+    </Routes>
+  );
+}

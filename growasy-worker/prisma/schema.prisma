@@ -1,0 +1,1029 @@
+// Growasy - Instagram Automation SaaS
+// Production Prisma schema targeting MySQL 5.6
+// Conventions:
+//   - UUID (char36) primary keys, generated client-side by Prisma
+//   - createdAt / updatedAt on every model
+//   - deletedAt on every model that supports soft delete
+//   - Explicit join tables (never implicit m2m) so we can audit/soft-delete relations
+//   - MySQL 5.6 target: no native JSON type (added in 5.7.8), so every semi-structured
+//     field is `String @db.LongText` instead of Prisma's `Json` scalar. Application code
+//     MUST JSON.stringify() before writing and JSON.parse() after reading these columns —
+//     Prisma will not do it automatically the way it does for a true Json field. Each one
+//     is commented "JSON-encoded string" below as a reminder for whoever builds that module.
+//   - MySQL 5.6 (default row format) caps a single-column index at 767 bytes. Under utf8mb4
+//     (4 bytes/char) that's ~191 characters, so unique VARCHAR columns are capped at 191
+//     (or sized exactly to a fixed-length hash, e.g. VARCHAR(64) for a sha256 hex digest)
+//     rather than the 255 you'd default to on MySQL 8.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum OrgMemberStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum OrgPlanTier {
+  FREE
+  STARTER
+  PROFESSIONAL
+  GROWTH
+  AGENCY
+  ENTERPRISE
+}
+
+enum InstagramAccountStatus {
+  CONNECTED
+  NEEDS_RECONNECT // token expiring soon (proactive) — still usable but user should reconnect
+  TOKEN_EXPIRED
+  REVOKED
+  DISCONNECTED
+  ERROR
+}
+
+enum AutomationStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum TriggerType {
+  COMMENT_KEYWORD
+  DM_KEYWORD
+  STORY_REPLY
+  STORY_MENTION
+  DM_RECEIVED
+  COMMENT_RECEIVED
+  LIVE_COMMENT
+  REFERRAL
+  WELCOME_MESSAGE
+}
+
+enum TriggerMatchType {
+  EXACT
+  CONTAINS
+  STARTS_WITH
+  REGEX
+  ANY
+}
+
+enum ActionType {
+  SEND_DM
+  REPLY_COMMENT
+  WAIT
+  TAG_CONTACT
+  UNTAG_CONTACT
+  SET_CUSTOM_FIELD
+  NOTIFY_OWNER
+  ADD_TO_SEQUENCE
+  CONDITION
+  WEBHOOK_CALL
+}
+
+enum ExecutionStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+  IN_PROGRESS
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  ARCHIVED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  STORY_REPLY
+  STORY_MENTION
+  COMMENT_REPLY
+  QUICK_REPLY
+  TEMPLATE
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum WebhookSource {
+  META
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum UsageMetric {
+  MESSAGES_SENT
+  CONTACTS
+  AUTOMATIONS_RUN
+  INSTAGRAM_ACCOUNTS
+  TEAM_MEMBERS
+}
+
+enum NotificationType {
+  SYSTEM
+  AUTOMATION
+  BILLING
+  SECURITY
+  MENTION
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  PASSWORD_RESET
+  PERMISSION_CHANGE
+  EXPORT
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ============================================================================
+// IDENTITY & AUTH
+// ============================================================================
+
+model User {
+  id                  String     @id @default(uuid()) @db.Char(36)
+  email               String     @unique @db.VarChar(191) // capped at 191, not 255 — see MySQL 5.6 note at top of file
+  passwordHash        String     @db.VarChar(255)
+  firstName           String     @db.VarChar(100)
+  lastName            String     @db.VarChar(100)
+  avatarUrl           String?    @db.VarChar(1024)
+  status              UserStatus @default(PENDING_VERIFICATION)
+  isEmailVerified     Boolean    @default(false)
+  isSuperAdmin        Boolean    @default(false)
+  lastLoginAt         DateTime?
+  lastLoginIp         String?    @db.VarChar(64)
+  failedLoginAttempts Int        @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  deletedAt           DateTime?
+
+  ownedOrganizations         Organization[]           @relation("OrganizationOwner")
+  organizationMemberships    OrganizationMember[]
+  sessions                   Session[]
+  emailVerificationTokens    EmailVerificationToken[]
+  passwordResetTokens        PasswordResetToken[]
+  connectedInstagramAccounts InstagramAccount[]       @relation("InstagramConnectedBy")
+  createdTrackedLinks        TrackedLink[]            @relation("LinkCreatedBy")
+  assignedConversations      Conversation[]           @relation("ConversationAssignee")
+  sentMessages               Message[]                @relation("MessageSentBy")
+  notifications              Notification[]
+  activityLogs               ActivityLog[]
+  auditLogsAsActor           AuditLog[]               @relation("AuditActor")
+  apiLogs                    ApiLog[]
+  createdSupportTickets      SupportTicket[]          @relation("TicketCreatedBy")
+  assignedSupportTickets     SupportTicket[]          @relation("TicketAssignedTo")
+  supportTicketMessages      SupportTicketMessage[]
+  updatedSystemSettings      SystemSetting[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Organization {
+  id        String    @id @default(uuid()) @db.Char(36)
+  name      String    @db.VarChar(255)
+  slug      String    @unique @db.VarChar(191)
+  ownerId   String    @db.Char(36)
+  logoUrl   String?   @db.VarChar(1024)
+  timezone  String    @default("UTC") @db.VarChar(64)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  owner               User                 @relation("OrganizationOwner", fields: [ownerId], references: [id])
+  members             OrganizationMember[]
+  roles               Role[]
+  instagramAccounts   InstagramAccount[]
+  automationRules     AutomationRule[]
+  automationTemplates AutomationTemplate[]
+  contacts            Contact[]
+  tags                Tag[]
+  conversations       Conversation[]
+  webhookEvents       WebhookEvent[]
+  apiLogs             ApiLog[]
+  subscription        Subscription?
+  invoices            Invoice[]
+  payments            Payment[]
+  usageTracking       UsageTracking[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+  auditLogs           AuditLog[]
+  supportTickets      SupportTicket[]
+  trackedLinks        TrackedLink[]
+
+  @@index([ownerId])
+  @@index([deletedAt])
+}
+
+model Role {
+  id             String    @id @default(uuid()) @db.Char(36)
+  organizationId String    @db.Char(36)
+  name           String    @db.VarChar(100)
+  slug           String    @db.VarChar(100)
+  isSystem       Boolean   @default(false) // Owner/Admin/Editor/Viewer seeded per org, not user-deletable
+  description    String?   @db.VarChar(500)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  members      OrganizationMember[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Char(36)
+  resource    String   @db.VarChar(100) // e.g. "automation", "contact", "billing"
+  action      String   @db.VarChar(50) // e.g. "create", "read", "update", "delete", "manage"
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+}
+
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Char(36)
+  roleId       String   @db.Char(36)
+  permissionId String   @db.Char(36)
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model OrganizationMember {
+  id              String          @id @default(uuid()) @db.Char(36)
+  organizationId  String          @db.Char(36)
+  userId          String          @db.Char(36)
+  roleId          String          @db.Char(36)
+  status          OrgMemberStatus @default(INVITED)
+  invitedByUserId String?         @db.Char(36)
+  invitedAt       DateTime        @default(now())
+  joinedAt        DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+/// One row per issued refresh token / device login. Powers session management,
+/// "remember me" (long-lived vs short-lived expiresAt), and remote sign-out.
+model Session {
+  id               String    @id @default(uuid()) @db.Char(36)
+  userId           String    @db.Char(36)
+  refreshTokenHash String    @unique @db.VarChar(64) // sha256 hex digest, always exactly 64 chars
+  userAgent        String?   @db.VarChar(500)
+  ipAddress        String?   @db.VarChar(64)
+  isRememberMe     Boolean   @default(false)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id         String    @id @default(uuid()) @db.Char(36)
+  userId     String    @db.Char(36)
+  tokenHash  String    @unique @db.VarChar(64) // sha256 hex digest, always exactly 64 chars
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid()) @db.Char(36)
+  userId     String    @db.Char(36)
+  tokenHash  String    @unique @db.VarChar(64) // sha256 hex digest, always exactly 64 chars
+  expiresAt  DateTime
+  consumedAt DateTime?
+  requestIp  String?   @db.VarChar(64)
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================================================
+// INSTAGRAM / META
+// ============================================================================
+
+model InstagramAccount {
+  id                   String                 @id @default(uuid()) @db.Char(36)
+  organizationId       String                 @db.Char(36)
+  instagramBusinessId  String                 @unique @db.VarChar(64) // IG user id (Instagram Login "user_id")
+  facebookPageId       String?                @db.VarChar(64) // null under Instagram Login flow; only set by the legacy FB-Page flow
+  username             String                 @db.VarChar(255)
+  name                 String?                @db.VarChar(255)
+  profilePictureUrl    String?                @db.VarChar(1024)
+  accessTokenEncrypted String                 @db.Text
+  tokenExpiresAt       DateTime?
+  scopes               String?                @db.LongText // JSON-encoded string[]
+  status               InstagramAccountStatus @default(CONNECTED)
+  connectedByUserId    String?                @db.Char(36)
+  lastSyncedAt         DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  deletedAt            DateTime?
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy     User?            @relation("InstagramConnectedBy", fields: [connectedByUserId], references: [id])
+  automationRules AutomationRule[]
+  contacts        Contact[]
+  conversations   Conversation[]
+  messages        Message[]
+  webhookEvents   WebhookEvent[]
+  trackedLinks    TrackedLink[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+// ============================================================================
+// AUTOMATION ENGINE
+// ============================================================================
+
+model AutomationRule {
+  id                 String           @id @default(uuid()) @db.Char(36)
+  organizationId     String           @db.Char(36)
+  instagramAccountId String           @db.Char(36)
+  name               String           @db.VarChar(255)
+  description        String?          @db.VarChar(1000)
+  status             AutomationStatus @default(DRAFT)
+  priority           Int              @default(0)
+  isTemplateInstance Boolean          @default(false)
+  sourceTemplateId   String?          @db.Char(36)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount         @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  sourceTemplate   AutomationTemplate?      @relation(fields: [sourceTemplateId], references: [id])
+  triggers         AutomationTrigger[]
+  actions          AutomationAction[]
+  executionLogs    AutomationExecutionLog[]
+  messages         Message[]
+
+  @@index([organizationId])
+  @@index([instagramAccountId])
+  @@index([status])
+}
+
+model AutomationTrigger {
+  id               String           @id @default(uuid()) @db.Char(36)
+  automationRuleId String           @db.Char(36)
+  type             TriggerType
+  matchType        TriggerMatchType @default(CONTAINS)
+  keywords         String?          @db.LongText // JSON-encoded string[]
+  config           String?          @db.LongText // JSON-encoded object — extra trigger-specific config (e.g. media id for comment triggers)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  automationRule AutomationRule @relation(fields: [automationRuleId], references: [id], onDelete: Cascade)
+
+  @@index([automationRuleId])
+  @@index([type])
+}
+
+model AutomationAction {
+  id               String     @id @default(uuid()) @db.Char(36)
+  automationRuleId String     @db.Char(36)
+  type             ActionType
+  order            Int        @default(0)
+  parentActionId   String?    @db.Char(36)
+  config           String     @db.LongText // JSON-encoded object — message text/template, delaySeconds, tagIds, variables, condition expr, etc.
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  automationRule AutomationRule     @relation(fields: [automationRuleId], references: [id], onDelete: Cascade)
+  parentAction   AutomationAction?  @relation("ActionBranch", fields: [parentActionId], references: [id])
+  childActions   AutomationAction[] @relation("ActionBranch")
+
+  @@index([automationRuleId])
+  @@index([parentActionId])
+}
+
+model AutomationTemplate {
+  id             String    @id @default(uuid()) @db.Char(36)
+  organizationId String?   @db.Char(36) // null = global system template
+  name           String    @db.VarChar(255)
+  description    String?   @db.VarChar(1000)
+  category       String?   @db.VarChar(100)
+  definition     String    @db.LongText // JSON-encoded object — serialized triggers + actions graph
+  isPublic       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instances    AutomationRule[]
+
+  @@index([organizationId])
+}
+
+model AutomationExecutionLog {
+  id               String          @id @default(uuid()) @db.Char(36)
+  automationRuleId String          @db.Char(36)
+  contactId        String?         @db.Char(36)
+  status           ExecutionStatus
+  errorMessage     String?         @db.VarChar(1000)
+  durationMs       Int?
+  executedAt       DateTime        @default(now())
+
+  automationRule AutomationRule @relation(fields: [automationRuleId], references: [id], onDelete: Cascade)
+  contact        Contact?       @relation(fields: [contactId], references: [id])
+
+  @@index([automationRuleId])
+  @@index([contactId])
+  @@index([executedAt])
+  @@index([status])
+}
+
+/// Dedup + rate-limit ledger for comment→DM automation. One row per Instagram
+/// comment the webhook pipeline has seen. growasy-worker owns the read/write of
+/// this table (growasy-api only produces webhook jobs); the `commentId` unique
+/// index gives idempotent dedup, and (commenterId, ruleId, dmSent, createdAt)
+/// backs the per-user 24h DM rate limit.
+model ProcessedComment {
+  id                 String   @id @default(uuid()) @db.Char(36)
+  commentId          String   @unique @db.VarChar(64)
+  commenterId        String   @db.VarChar(64)
+  mediaId            String?  @db.VarChar(64)
+  instagramAccountId String?  @db.Char(36)
+  ruleId             String?  @db.Char(36)
+  matched            Boolean  @default(false)
+  dmSent             Boolean  @default(false)
+  outcome            String?  @db.VarChar(32) // no_match | matched | rate_limited | dm_sent | failed | needs_reconnect
+  errorMessage       String?  @db.VarChar(1000)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([commenterId, ruleId, createdAt])
+  @@index([instagramAccountId])
+}
+
+/// Lead-capture state ledger for the "collect email" DM flow. When an automation
+/// with `collectEmail` sends its DM, a row is upserted here (status AWAITING) so
+/// the contact's next inbound DM is intercepted and parsed as an email answer
+/// instead of being matched against keyword rules. growasy-worker owns this table
+/// (growasy-api only reads it for display). One active capture per contact per
+/// account — the unique index makes the upsert idempotent.
+model PendingLeadCapture {
+  id                 String   @id @default(uuid()) @db.Char(36)
+  instagramAccountId String   @db.Char(36)
+  organizationId     String   @db.Char(36)
+  contactScopedId    String   @db.VarChar(64) // sender IGSID we're awaiting an email from
+  ruleId             String   @db.Char(36)
+  status             String   @default("AWAITING") @db.VarChar(16) // AWAITING | COMPLETED | EXPIRED
+  attempts           Int      @default(0)
+  capturedEmail      String?  @db.VarChar(255)
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([instagramAccountId, contactScopedId])
+  @@index([ruleId])
+  @@index([organizationId])
+}
+
+// ============================================================================
+// CONTACTS & MESSAGING
+// ============================================================================
+
+model Contact {
+  id                 String    @id @default(uuid()) @db.Char(36)
+  organizationId     String    @db.Char(36)
+  instagramAccountId String    @db.Char(36)
+  instagramScopedId  String    @db.VarChar(64) // IGSID for this contact <-> business pairing
+  username           String?   @db.VarChar(255)
+  name               String?   @db.VarChar(255)
+  profilePictureUrl  String?   @db.VarChar(1024)
+  email              String?   @db.VarChar(255)
+  phone              String?   @db.VarChar(50)
+  notes              String?   @db.Text
+  customFields       String?   @db.LongText // JSON-encoded object
+  isSubscribed       Boolean   @default(true)
+  lastInteractionAt  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount         @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  tags             ContactTag[]
+  conversations    Conversation[]
+  messages         Message[]
+  executionLogs    AutomationExecutionLog[]
+
+  @@unique([instagramAccountId, instagramScopedId])
+  @@index([organizationId])
+  @@index([lastInteractionAt])
+}
+
+model Tag {
+  id             String   @id @default(uuid()) @db.Char(36)
+  organizationId String   @db.Char(36)
+  name           String   @db.VarChar(100)
+  color          String   @default("#6366F1") @db.VarChar(20)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts     ContactTag[]
+
+  @@unique([organizationId, name])
+}
+
+model ContactTag {
+  id        String   @id @default(uuid()) @db.Char(36)
+  contactId String   @db.Char(36)
+  tagId     String   @db.Char(36)
+  createdAt DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, tagId])
+  @@index([tagId])
+}
+
+model Conversation {
+  id                 String             @id @default(uuid()) @db.Char(36)
+  organizationId     String             @db.Char(36)
+  instagramAccountId String             @db.Char(36)
+  contactId          String             @db.Char(36)
+  status             ConversationStatus @default(OPEN)
+  assignedToUserId   String?            @db.Char(36)
+  lastMessageAt      DateTime?
+  unreadCount        Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  contact          Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedTo       User?            @relation("ConversationAssignee", fields: [assignedToUserId], references: [id])
+  messages         Message[]
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id                 String           @id @default(uuid()) @db.Char(36)
+  conversationId     String           @db.Char(36)
+  contactId          String           @db.Char(36)
+  instagramAccountId String           @db.Char(36)
+  direction          MessageDirection
+  type               MessageType      @default(TEXT)
+  content            String?          @db.Text
+  mediaUrl           String?          @db.VarChar(1024)
+  status             MessageStatus    @default(QUEUED)
+  externalMessageId  String?          @db.VarChar(128)
+  automationRuleId   String?          @db.Char(36)
+  sentByUserId       String?          @db.Char(36)
+  sentAt             DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  conversation     Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contact          Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  automationRule   AutomationRule?  @relation(fields: [automationRuleId], references: [id])
+  sentBy           User?            @relation("MessageSentBy", fields: [sentByUserId], references: [id])
+
+  @@index([conversationId])
+  @@index([contactId])
+  @@index([createdAt])
+  @@index([externalMessageId])
+}
+
+// ============================================================================
+// LINK TRACKING
+// ============================================================================
+
+/// A short, trackable link. The public redirect endpoint (`/api/l/:slug`) looks
+/// it up by slug, records a LinkClick, and 302-redirects to `destinationUrl`.
+/// `clickCount`/`uniqueClickCount` are denormalized running totals kept in sync
+/// on every click so list/stat reads don't have to aggregate the clicks table.
+model TrackedLink {
+  id                 String    @id @default(uuid()) @db.Char(36)
+  organizationId     String    @db.Char(36)
+  instagramAccountId String?   @db.Char(36) // optional: attribute the link to one account
+  createdByUserId    String?   @db.Char(36)
+  slug               String    @unique @db.VarChar(32) // short code in the public URL
+  destinationUrl     String    @db.VarChar(2048)
+  title              String?   @db.VarChar(255)
+  clickCount         Int       @default(0)
+  uniqueClickCount   Int       @default(0)
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id])
+  createdBy        User?             @relation("LinkCreatedBy", fields: [createdByUserId], references: [id])
+  clicks           LinkClick[]
+
+  @@index([organizationId])
+  @@index([instagramAccountId])
+}
+
+/// One row per click on a tracked link. `visitorHash` is sha256(linkId+ip+ua) —
+/// used to tell first-time vs repeat visitors for the unique count without
+/// storing a raw IP. Every click is recorded (repeat included) so the
+/// clicks-over-time chart has full granularity.
+model LinkClick {
+  id            String   @id @default(uuid()) @db.Char(36)
+  trackedLinkId String   @db.Char(36)
+  visitorHash   String   @db.VarChar(64) // sha256 hex digest, always exactly 64 chars
+  referrer      String?  @db.VarChar(1024)
+  userAgent     String?  @db.VarChar(500)
+  createdAt     DateTime @default(now())
+
+  trackedLink TrackedLink @relation(fields: [trackedLinkId], references: [id], onDelete: Cascade)
+
+  @@index([trackedLinkId, createdAt])
+  @@index([trackedLinkId, visitorHash])
+}
+
+// ============================================================================
+// WEBHOOKS & LOGS
+// ============================================================================
+
+model WebhookEvent {
+  id                 String             @id @default(uuid()) @db.Char(36)
+  organizationId     String?            @db.Char(36)
+  instagramAccountId String?            @db.Char(36)
+  source             WebhookSource      @default(META)
+  eventType          String             @db.VarChar(100)
+  idempotencyKey     String             @unique @db.VarChar(191)
+  payload            String             @db.LongText // JSON-encoded object
+  status             WebhookEventStatus @default(RECEIVED)
+  retryCount         Int                @default(0)
+  errorMessage       String?            @db.Text
+  receivedAt         DateTime           @default(now())
+  processedAt        DateTime?
+
+  organization     Organization?     @relation(fields: [organizationId], references: [id])
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([receivedAt])
+}
+
+model ApiLog {
+  id             String   @id @default(uuid()) @db.Char(36)
+  organizationId String?  @db.Char(36)
+  userId         String?  @db.Char(36)
+  method         String   @db.VarChar(10)
+  path           String   @db.VarChar(500)
+  statusCode     Int
+  ipAddress      String?  @db.VarChar(64)
+  userAgent      String?  @db.VarChar(500)
+  responseTimeMs Int
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@index([statusCode])
+}
+
+model ActivityLog {
+  id             String   @id @default(uuid()) @db.Char(36)
+  organizationId String   @db.Char(36)
+  userId         String?  @db.Char(36)
+  action         String   @db.VarChar(100)
+  entityType     String   @db.VarChar(100)
+  entityId       String?  @db.Char(36)
+  description    String   @db.VarChar(500)
+  metadata       String?  @db.LongText // JSON-encoded object
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id             String      @id @default(uuid()) @db.Char(36)
+  organizationId String?     @db.Char(36)
+  actorUserId    String?     @db.Char(36)
+  action         AuditAction
+  entityType     String      @db.VarChar(100)
+  entityId       String?     @db.Char(36)
+  ipAddress      String?     @db.VarChar(64)
+  userAgent      String?     @db.VarChar(500)
+  before         String?     @db.LongText // JSON-encoded object — entity state before the change
+  after          String?     @db.LongText // JSON-encoded object — entity state after the change
+  createdAt      DateTime    @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  actor        User?         @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([organizationId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// BILLING & SUBSCRIPTIONS
+// ============================================================================
+
+model Plan {
+  id           String      @id @default(uuid()) @db.Char(36)
+  name         String      @db.VarChar(100)
+  tier         OrgPlanTier @unique
+  monthlyPrice Int // minor units (cents)
+  yearlyPrice  Int // minor units (cents)
+  currency     String      @default("USD") @db.VarChar(10)
+  limits       String      @db.LongText // JSON-encoded { maxInstagramAccounts, maxContacts, maxAutomations, maxTeamMembers, maxMessagesPerMonth }
+  features     String      @db.LongText // JSON-encoded string[] of feature flags/marketing bullets
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                     String             @id @default(uuid()) @db.Char(36)
+  organizationId         String             @unique @db.Char(36)
+  planId                 String             @db.Char(36)
+  status                 SubscriptionStatus @default(TRIALING)
+  billingCycle           BillingCycle       @default(MONTHLY)
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  cancelAtPeriodEnd      Boolean            @default(false)
+  trialEndsAt            DateTime?
+  externalCustomerId     String?            @db.VarChar(128) // reserved for future payment-gateway integration
+  externalSubscriptionId String?            @db.VarChar(128)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id])
+  invoices     Invoice[]
+
+  @@index([planId])
+  @@index([status])
+}
+
+model Invoice {
+  id             String        @id @default(uuid()) @db.Char(36)
+  organizationId String        @db.Char(36)
+  subscriptionId String?       @db.Char(36)
+  invoiceNumber  String        @unique @db.VarChar(64)
+  amount         Int // minor units
+  currency       String        @default("USD") @db.VarChar(10)
+  status         InvoiceStatus @default(DRAFT)
+  issuedAt       DateTime      @default(now())
+  dueAt          DateTime?
+  paidAt         DateTime?
+  pdfUrl         String?       @db.VarChar(1024)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  payments     Payment[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Char(36)
+  organizationId    String        @db.Char(36)
+  invoiceId         String?       @db.Char(36)
+  amount            Int
+  currency          String        @default("USD") @db.VarChar(10)
+  status            PaymentStatus @default(PENDING)
+  method            String?       @db.VarChar(50) // reserved: "card", "bank_transfer", etc.
+  externalPaymentId String?       @db.VarChar(128)
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model UsageTracking {
+  id             String      @id @default(uuid()) @db.Char(36)
+  organizationId String      @db.Char(36)
+  metric         UsageMetric
+  period         String      @db.VarChar(10) // "YYYY-MM"
+  count          Int         @default(0)
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metric, period])
+  @@index([period])
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id             String           @id @default(uuid()) @db.Char(36)
+  organizationId String           @db.Char(36)
+  userId         String           @db.Char(36)
+  type           NotificationType @default(SYSTEM)
+  title          String           @db.VarChar(255)
+  body           String?          @db.VarChar(1000)
+  metadata       String?          @db.LongText // JSON-encoded object
+  isRead         Boolean          @default(false)
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([organizationId])
+}
+
+// ============================================================================
+// ADMIN / SYSTEM
+// ============================================================================
+
+model SystemSetting {
+  id              String   @id @default(uuid()) @db.Char(36)
+  key             String   @unique @db.VarChar(150)
+  value           String   @db.LongText // JSON-encoded value
+  description     String?  @db.VarChar(500)
+  updatedByUserId String?  @db.Char(36)
+  updatedAt       DateTime @updatedAt
+
+  updatedBy User? @relation(fields: [updatedByUserId], references: [id])
+}
+
+model FeatureFlag {
+  id                    String   @id @default(uuid()) @db.Char(36)
+  key                   String   @unique @db.VarChar(150)
+  name                  String   @db.VarChar(255)
+  description           String?  @db.VarChar(500)
+  isEnabled             Boolean  @default(false)
+  rolloutPercentage     Int      @default(0)
+  organizationOverrides String?  @db.LongText // JSON-encoded { [organizationId]: boolean }
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model SupportTicket {
+  id               String                @id @default(uuid()) @db.Char(36)
+  organizationId   String                @db.Char(36)
+  createdByUserId  String                @db.Char(36)
+  assignedToUserId String?               @db.Char(36)
+  subject          String                @db.VarChar(255)
+  status           SupportTicketStatus   @default(OPEN)
+  priority         SupportTicketPriority @default(MEDIUM)
+  closedAt         DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User                   @relation("TicketCreatedBy", fields: [createdByUserId], references: [id])
+  assignedTo   User?                  @relation("TicketAssignedTo", fields: [assignedToUserId], references: [id])
+  messages     SupportTicketMessage[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model SupportTicketMessage {
+  id           String   @id @default(uuid()) @db.Char(36)
+  ticketId     String   @db.Char(36)
+  authorUserId String?  @db.Char(36) // null = system/automated message
+  body         String   @db.Text
+  isInternal   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User?         @relation(fields: [authorUserId], references: [id])
+
+  @@index([ticketId])
+}

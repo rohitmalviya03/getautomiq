@@ -1,0 +1,58 @@
+# Production reference config for growasy-api's host (frontend is deployed
+# separately — see growasy-web/README — and typically sits behind Cloudflare
+# pointing straight at a static host/CDN, not this nginx).
+#
+# Certificates: obtain/renew with certbot in webroot mode, e.g.
+#   certbot certonly --webroot -w /var/www/certbot -d api.growasy.app
+# and reload nginx after renewal (certbot's systemd timer + a `nginx -s reload`
+# deploy-hook is the standard setup).
+#
+# Substitute ${API_DOMAIN} before deploying (envsubst or your CI templating step).
+
+upstream growasy_api {
+    # Scale by adding more `server` lines / a Docker Swarm or k8s Service VIP —
+    # the API is stateless (sessions live in MySQL, not process memory) so any
+    # instance can serve any request.
+    server api:4000;
+}
+
+server {
+    listen 80;
+    server_name ${API_DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ${API_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass http://growasy_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Meta webhooks and SSE-style long polling can hold connections open.
+        proxy_read_timeout 75s;
+    }
+}
