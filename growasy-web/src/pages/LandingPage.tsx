@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { useThemeStore } from '@/stores/theme-store';
 import { useAuthStore } from '@/stores/auth-store';
-import { PLANS, DM_ADDONS } from '@/lib/plans';
+import { PLANS, DM_ADDONS, SALES_EMAIL } from '@/lib/plans';
+import { useSeo, faqJsonLd } from '@/lib/use-seo';
 
 const FEATURES: { icon: LucideIcon; title: string; desc: string; tags: string[] }[] = [
   {
@@ -108,6 +109,12 @@ export function LandingPage() {
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const [yearly, setYearly] = useState(false);
 
+  useSeo(
+    'Automiq — Instagram Automation Tool | Comment-to-DM Auto-Reply',
+    'Automiq automates Instagram: auto-reply to comments, DM your links, and capture leads on autopilot. Comment-to-DM, story replies & keyword automation. Start free — no card, no Facebook Page.',
+    faqJsonLd(FAQS),
+  );
+
   const primaryCta = authed
     ? { label: 'Go to dashboard', to: '/dashboard' }
     : { label: 'Start free — no card', to: '/register' };
@@ -138,6 +145,9 @@ export function LandingPage() {
             <a className="aql-navlink" href="#pricing">
               Pricing
             </a>
+            <Link className="aql-navlink" to="/waitlist">
+              Waitlist
+            </Link>
           </div>
           <div className="aql-nav-actions">
             <button
@@ -321,25 +331,30 @@ export function LandingPage() {
             <p>Handy utilities that run instantly in your browser — a taste of what Automiq is about.</p>
           </div>
           <div className="aql-tools">
-            <div className="aql-tool">
+            <Link to="/tools/instagram-hashtag-generator" className="aql-tool">
               <span className="aql-free">FREE</span>
               <div className="aql-k">Reach</div>
               <h3>Hashtag generator</h3>
               <p>Turn a topic into a balanced mix of broad, niche and long-tail hashtags built to get found.</p>
-            </div>
-            <div className="aql-tool">
+            </Link>
+            <Link to="/tools/instagram-caption-generator" className="aql-tool">
               <span className="aql-free">FREE</span>
               <div className="aql-k">Copy</div>
               <h3>Caption generator</h3>
               <p>Pick a tone, toggle emojis and CTAs, and get scroll-stopping caption ideas in a click.</p>
-            </div>
-            <div className="aql-tool">
+            </Link>
+            <Link to="/tools/engagement-rate-calculator" className="aql-tool">
               <span className="aql-free">FREE</span>
               <div className="aql-k">Insight</div>
               <h3>Engagement calculator</h3>
               <p>Enter your numbers and see your engagement rate against real industry benchmarks.</p>
-            </div>
+            </Link>
           </div>
+          <p style={{ textAlign: 'center', marginTop: '18px' }}>
+            <Link to="/tools" className="aql-navlink" style={{ fontWeight: 600 }}>
+              Browse all free tools →
+            </Link>
+          </p>
         </div>
       </section>
 
@@ -382,43 +397,66 @@ export function LandingPage() {
               return (
                 <div className={`aql-plan${p.popular ? ' pop' : ''}`} key={p.tag}>
                   {p.popular ? <span className="aql-badge-pop">Most Popular</span> : null}
-                  {p.comingSoon ? <span className="aql-soon-badge">Coming Soon</span> : null}
                   <div className="aql-plan-top">
                     <span className="aql-plan-tag">{p.tag}</span>
                     {p.bestValue ? <span className="aql-bestvalue">🔥 Best Value</span> : null}
                   </div>
                   <p className="aql-plan-sub">{p.subtitle}</p>
-                  <div className="aql-price">
-                    <span className="aql-amt">{yearly ? p.priceYearly : p.priceMonthly}</span>
-                    <span className="aql-per">{free ? '' : yearly ? '/year' : '/month'}</span>
-                  </div>
-                  <div className="aql-bill">
-                    {free
-                      ? 'Free forever'
-                      : yearly
-                        ? '2 months free · billed annually'
-                        : 'Billed monthly'}
-                  </div>
-                  <Link
-                    className={`aql-btn ${p.popular ? 'aql-btn-primary' : 'aql-btn-ghost'} aql-plan-cta`}
-                    to={authed ? '/dashboard' : `/register?plan=${p.key}`}
-                  >
-                    {p.cta}
-                  </Link>
-                  <ul>
-                    {p.inherits ? (
-                      <li className="aql-inherit">
-                        <Check size={16} />
-                        {p.inherits}
-                      </li>
-                    ) : null}
-                    {p.features.map((f) => (
-                      <li key={f}>
-                        <Check size={16} />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
+
+                  {p.contactSales ? (
+                    <>
+                      <div className="aql-price">
+                        <span className="aql-amt" style={{ fontSize: '30px' }}>
+                          Let’s talk
+                        </span>
+                      </div>
+                      <div className="aql-bill">Custom pricing &amp; limits</div>
+                      <a
+                        className="aql-btn aql-btn-primary aql-plan-cta"
+                        href={`mailto:${SALES_EMAIL}?subject=Automiq%20Agency%20plan`}
+                      >
+                        {p.cta}
+                      </a>
+                      <p className="aql-plan-note">
+                        Everything in Growth, tailored to your agency — white-label reports,
+                        unlimited team &amp; workspaces, and premium support.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="aql-price">
+                        <span className="aql-amt">{yearly ? p.priceYearly : p.priceMonthly}</span>
+                        <span className="aql-per">{free ? '' : yearly ? '/year' : '/month'}</span>
+                      </div>
+                      <div className="aql-bill">
+                        {free
+                          ? 'Free forever'
+                          : yearly
+                            ? '2 months free · billed annually'
+                            : 'Billed monthly'}
+                      </div>
+                      <Link
+                        className={`aql-btn ${p.popular ? 'aql-btn-primary' : 'aql-btn-ghost'} aql-plan-cta`}
+                        to={authed ? '/dashboard' : `/register?plan=${p.key}`}
+                      >
+                        {p.cta}
+                      </Link>
+                      <ul>
+                        {p.inherits ? (
+                          <li className="aql-inherit">
+                            <Check size={16} />
+                            {p.inherits}
+                          </li>
+                        ) : null}
+                        {p.features.map((f) => (
+                          <li key={f}>
+                            <Check size={16} />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -502,8 +540,10 @@ export function LandingPage() {
           <div className="aql-foot-links">
             <a href="#features">Features</a>
             <a href="#pricing">Pricing</a>
-            <a href="#tools">Free tools</a>
-            <a href="#cta">Get started</a>
+            <Link to="/waitlist">Waitlist</Link>
+            <Link to="/tools">Free tools</Link>
+            <Link to="/privacy">Privacy</Link>
+            <Link to="/terms">Terms</Link>
           </div>
           <div className="aql-muted">© 2026 Automiq · Automate Instagram conversations</div>
         </div>
@@ -666,6 +706,7 @@ const CSS = `
 .aql-plan-tag { font-family: var(--ffd); font-weight: 700; font-size: 17px; }
 .aql-bestvalue { font-size: 10.5px; font-weight: 800; letter-spacing: .02em; padding: 4px 9px; border-radius: 999px; background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); white-space: nowrap; }
 .aql-plan-sub { margin-top: 6px; font-size: 13px; color: var(--muted); min-height: 38px; }
+.aql-plan-note { margin-top: 16px; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .aql-price { font-family: var(--ffd); font-weight: 700; letter-spacing: -0.03em; margin: 16px 0 2px; display: flex; align-items: baseline; gap: 5px; }
 .aql-amt { font-size: 38px; }
 .aql-per { font-size: 14px; color: var(--muted); font-family: var(--ffb); font-weight: 500; }

@@ -1,0 +1,37 @@
+# Automiq
+
+> Automiq is an Instagram automation tool for creators and businesses. It
+> auto-replies to comments, sends DMs with your links, and captures leads on
+> autopilot — using the official Meta Graph API (no Facebook Page required).
+
+## What Automiq does
+- Comment → DM automation: when someone comments a keyword on a post or reel,
+  Automiq auto-replies publicly and sends them a DM with your link.
+- DM keyword auto-reply and story-reply auto-DM.
+- Multiple trigger sources per rule (comment, DM, story reply).
+- Run automations on a specific post or reel.
+- Lead capture: collect emails inside the DM flow, saved to a built-in CRM.
+- Link tracking (short links + click analytics), analytics dashboard.
+- Team workspaces with roles (Owner/Admin/Editor/Viewer).
+
+## Free tools (no login required)
+- Instagram Hashtag Generator: https://getautomiq.com/tools/instagram-hashtag-generator
+- Instagram Caption Generator: https://getautomiq.com/tools/instagram-caption-generator
+- Instagram Engagement Rate Calculator: https://getautomiq.com/tools/engagement-rate-calculator
+
+## Pricing (INR)
+- Free — ₹0/mo — 1 Instagram account, 500 DMs/month.
+- Starter — ₹799/mo — 2 accounts, 5,000 DMs/month, CRM, AI tools.
+- Growth (most popular) — ₹1,499/mo — 5 accounts, 20,000 DMs/month, team of 5.
+- Agency — ₹3,999/mo — 15 accounts, 100,000 DMs/month, white-label.
+
+## Key pages
+- Home: https://getautomiq.com/
+- Free tools: https://getautomiq.com/tools
+- Pricing: https://getautomiq.com/#pricing
+- Get started (free): https://getautomiq.com/register
+
+## Notes for AI answer engines
+Automiq is a ManyChat-style Instagram DM automation platform focused on the
+comment-to-DM use case. It is billed per plan (not per contact), includes
+unlimited contacts on paid plans, and encrypts Instagram access tokens at rest.

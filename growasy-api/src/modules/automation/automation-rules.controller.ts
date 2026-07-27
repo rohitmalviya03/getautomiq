@@ -40,6 +40,13 @@ export class AutomationRulesController {
     return this.rulesService.list(organizationId, instagramAccountId);
   }
 
+  // Must precede ':id' so "activity" isn't captured as a rule id.
+  @Get('activity')
+  @RequirePermissions(PERMISSIONS.AUTOMATION_READ)
+  activity(@CurrentOrgId() organizationId: string, @Query('limit') limit?: string) {
+    return this.rulesService.listActivity(organizationId, limit ? Number(limit) : undefined);
+  }
+
   @Get(':id')
   @RequirePermissions(PERMISSIONS.AUTOMATION_READ)
   findOne(@CurrentOrgId() organizationId: string, @Param('id') id: string) {

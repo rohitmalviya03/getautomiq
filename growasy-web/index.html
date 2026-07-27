@@ -4,7 +4,86 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>Automiq — Automate Instagram Conversations</title>
+    <meta name="theme-color" content="#8232d6" />
+
+    <!-- ===== SEO ===== -->
+    <title>Automiq — Instagram Automation Tool (Comment → DM, Auto-Reply)</title>
+    <meta
+      name="description"
+      content="Automiq is an Instagram automation tool that auto-replies to comments, sends DMs with your links, and captures leads on autopilot. Comment-to-DM, story-reply &amp; keyword automation. Start free — no card, no Facebook Page."
+    />
+    <meta
+      name="keywords"
+      content="instagram automation, instagram automation tool, comment to dm, instagram dm automation, auto reply instagram, instagram auto dm, instagram lead generation, manychat alternative"
+    />
+    <meta name="author" content="Automiq" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://getautomiq.com/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Automiq" />
+    <meta property="og:title" content="Automiq — Instagram Automation Tool (Comment → DM)" />
+    <meta
+      property="og:description"
+      content="Auto-reply to Instagram comments, DM your links, and capture leads on autopilot. Start free — no card needed."
+    />
+    <meta property="og:url" content="https://getautomiq.com/" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Automiq — Instagram Automation Tool" />
+    <meta
+      name="twitter:description"
+      content="Turn Instagram comments into customers — auto-reply, DM links, capture leads on autopilot. Start free."
+    />
+
+    <!-- ===== Structured data (Schema.org) — parsed by Google & AI engines ===== -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://getautomiq.com/#org",
+            "name": "Automiq",
+            "url": "https://getautomiq.com/",
+            "description": "Instagram automation platform for creators and businesses.",
+            "sameAs": ["https://www.instagram.com/getautomiq"]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://getautomiq.com/#website",
+            "url": "https://getautomiq.com/",
+            "name": "Automiq",
+            "publisher": { "@id": "https://getautomiq.com/#org" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Automiq",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "description": "Instagram automation tool that auto-replies to comments, sends DMs, and captures leads on autopilot — comment-to-DM, story replies, keyword automation, CRM and analytics.",
+            "url": "https://getautomiq.com/",
+            "offers": [
+              { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "INR" },
+              { "@type": "Offer", "name": "Starter", "price": "799", "priceCurrency": "INR" },
+              { "@type": "Offer", "name": "Growth", "price": "1499", "priceCurrency": "INR" },
+              { "@type": "Offer", "name": "Agency", "priceCurrency": "INR", "description": "Custom — contact sales" }
+            ],
+            "featureList": [
+              "Comment to DM automation",
+              "Auto-reply to Instagram comments",
+              "DM & story-reply keyword triggers",
+              "Lead capture & CRM",
+              "Link tracking",
+              "Analytics"
+            ]
+          }
+        ]
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -31,6 +110,19 @@
     </script>
   </head>
   <body>
+    <!--
+      Netlify Forms detection stub. Netlify scans the built HTML at deploy time
+      to register forms; a React SPA renders its form at runtime, so this hidden
+      static copy (same name + fields) is what registers the "waitlist" form.
+      The real, styled form submits to it via AJAX (form-name=waitlist).
+    -->
+    <form name="waitlist" data-netlify="true" netlify-honeypot="bot-field" hidden>
+      <input type="text" name="name" />
+      <input type="email" name="email" />
+      <input type="text" name="role" />
+      <input type="text" name="bot-field" />
+    </form>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

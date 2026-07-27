@@ -23,8 +23,12 @@ import { ContentPage } from '@/pages/dashboard/ContentPage';
 import { ContactsPage } from '@/pages/dashboard/ContactsPage';
 import { AnalyticsPage } from '@/pages/dashboard/AnalyticsPage';
 import { LinksPage } from '@/pages/dashboard/LinksPage';
-import { ToolsPage } from '@/pages/dashboard/ToolsPage';
 import { BillingPage } from '@/pages/dashboard/BillingPage';
+import { ToolsHubPage } from '@/pages/tools/ToolsHubPage';
+import { ToolDetailPage } from '@/pages/tools/ToolDetailPage';
+import { PrivacyPage } from '@/pages/legal/PrivacyPage';
+import { TermsPage } from '@/pages/legal/TermsPage';
+import { WaitlistPage } from '@/pages/WaitlistPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const PUBLIC_PATH_PREFIXES = [
@@ -33,6 +37,10 @@ const PUBLIC_PATH_PREFIXES = [
   '/forgot-password',
   '/reset-password',
   '/verify-email',
+  '/tools', // public SEO tool pages — never bounce a logged-out visitor to login
+  '/privacy',
+  '/terms',
+  '/waitlist',
 ];
 
 export function App() {
@@ -68,6 +76,17 @@ export function App() {
       {/* Public marketing home — anyone can see it, logged in or not. */}
       <Route path="/" element={<LandingPage />} />
 
+      {/* Public, SEO-facing free tools — no login required. */}
+      <Route path="/tools" element={<ToolsHubPage />} />
+      <Route path="/tools/:slug" element={<ToolDetailPage />} />
+
+      {/* Legal (public) */}
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+
+      {/* Waitlist (public, Netlify Forms) */}
+      <Route path="/waitlist" element={<WaitlistPage />} />
+
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -88,7 +107,6 @@ export function App() {
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/links" element={<LinksPage />} />
-          <Route path="/tools" element={<ToolsPage />} />
           <Route path="/billing" element={<BillingPage />} />
           {/* META_REDIRECT_URI points at exactly this path — do not rename. */}
           <Route path="/settings/instagram/callback" element={<InstagramCallbackPage />} />

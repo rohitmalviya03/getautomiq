@@ -114,4 +114,12 @@ export class AppConfigService {
   get webAppUrl() {
     return this.config.get('WEB_APP_URL', { infer: true });
   }
+
+  get razorpay() {
+    return {
+      keyId: this.config.get('RAZORPAY_KEY_ID', { infer: true }),
+      keySecret: this.config.get('RAZORPAY_KEY_SECRET', { infer: true }),
+      webhookSecret: this.config.get('RAZORPAY_WEBHOOK_SECRET', { infer: true }),
+    };
+  }
 }

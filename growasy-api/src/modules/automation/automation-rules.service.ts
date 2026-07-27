@@ -221,6 +221,56 @@ export class AutomationRulesService {
     });
   }
 
+  /**
+   * Recent automation activity for the org — a user-facing feed of what the
+   * engine did (matched, DM sent, rate-limited, etc.), enriched with the rule
+   * name and the contact's username. Reads the ProcessedComment ledger.
+   */
+  async listActivity(organizationId: string, limit = 30) {
+    const accounts = await this.prisma.instagramAccount.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    const accountIds = accounts.map((a) => a.id);
+    if (accountIds.length === 0) return [];
+
+    const events = await this.prisma.processedComment.findMany({
+      where: { instagramAccountId: { in: accountIds } },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 100),
+    });
+    if (events.length === 0) return [];
+
+    const ruleIds = [...new Set(events.map((e) => e.ruleId).filter((id): id is string => !!id))];
+    const commenterIds = [...new Set(events.map((e) => e.commenterId))];
+
+    const [rules, contacts] = await Promise.all([
+      this.prisma.automationRule.findMany({
+        where: { id: { in: ruleIds } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.contact.findMany({
+        where: { instagramAccountId: { in: accountIds }, instagramScopedId: { in: commenterIds } },
+        select: { instagramAccountId: true, instagramScopedId: true, username: true },
+      }),
+    ]);
+    const ruleName = new Map(rules.map((r) => [r.id, r.name]));
+    const contactName = new Map(
+      contacts.map((c) => [`${c.instagramAccountId}:${c.instagramScopedId}`, c.username]),
+    );
+
+    return events.map((e) => ({
+      id: e.id,
+      outcome: e.outcome,
+      dmSent: e.dmSent,
+      matched: e.matched,
+      source: e.mediaId ? 'comment' : 'message',
+      ruleName: e.ruleId ? (ruleName.get(e.ruleId) ?? null) : null,
+      contactUsername: contactName.get(`${e.instagramAccountId}:${e.commenterId}`) ?? null,
+      createdAt: e.createdAt,
+    }));
+  }
+
   private async assertAccountInOrg(organizationId: string, instagramAccountId: string) {
     const account = await this.prisma.instagramAccount.findFirst({
       where: { id: instagramAccountId, organizationId, deletedAt: null },

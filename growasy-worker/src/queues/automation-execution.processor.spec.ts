@@ -48,6 +48,7 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
       }),
     },
     pendingLeadCapture: { upsert: vi.fn().mockResolvedValue({}) },
+    contact: { findUnique: vi.fn().mockResolvedValue(null) },
     // Billing: default to "no subscription" → DM limit not enforced.
     subscription: { findUnique: vi.fn().mockResolvedValue(null) },
     usageTracking: {
@@ -257,6 +258,21 @@ describe('processAutomationExecution', () => {
     await processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient });
 
     expect(prisma.pendingLeadCapture.upsert as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it('skips messaging a contact who opted out (unsubscribed)', async () => {
+    const prisma = makePrisma({
+      contact: { findUnique: vi.fn().mockResolvedValue({ isSubscribed: false }) },
+    });
+    const metaClient = makeMetaClient();
+
+    await processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient });
+
+    expect(metaClient.sendDmToComment).not.toHaveBeenCalled();
+    expect(metaClient.replyToComment).not.toHaveBeenCalled();
+    expect(prisma.processedComment.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ outcome: 'unsubscribed' }) }),
+    );
   });
 });
 

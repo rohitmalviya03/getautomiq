@@ -61,6 +61,11 @@ export const envSchema = z.object({
   SMTP_PASSWORD: z.string().optional().default(''),
 
   WEB_APP_URL: z.string().default('http://localhost:5173'),
+
+  // ---- Razorpay (payments) ----
+  RAZORPAY_KEY_ID: z.string().optional().default(''),
+  RAZORPAY_KEY_SECRET: z.string().optional().default(''),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional().default(''),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

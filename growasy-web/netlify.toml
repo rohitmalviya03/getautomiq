@@ -1,0 +1,16 @@
+# Netlify config for the Automiq web app (Vite SPA).
+# In Netlify: set the site's "Base directory" to growasy-web so this file is used.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA fallback: serve index.html for any path that isn't a real static file,
+# so client-side routes (/tools, /pricing, /dashboard, …) work on refresh.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

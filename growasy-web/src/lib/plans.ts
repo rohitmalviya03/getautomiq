@@ -15,12 +15,15 @@ export interface Plan {
   cta: string;
   popular?: boolean;
   bestValue?: boolean;
-  /** Sales-led / not self-serve yet — shows a badge but the card stays active. */
-  comingSoon?: boolean;
+  /** Sales-led plan — hides price + feature list, shows a "Contact Sales" CTA. */
+  contactSales?: boolean;
   /** Optional "Everything in X" lead line shown above the feature list. */
   inherits?: string;
   features: string[];
 }
+
+/** Where "Contact Sales" buttons point. */
+export const SALES_EMAIL = 'sales@getautomiq.com';
 
 export const PLANS: Plan[] = [
   {
@@ -86,16 +89,15 @@ export const PLANS: Plan[] = [
     key: 'AGENCY',
     tag: 'Agency',
     subtitle: 'Built for agencies managing multiple clients.',
-    priceMonthly: '₹3,999',
-    priceYearly: '₹38,390',
+    priceMonthly: 'Custom',
+    priceYearly: 'Custom',
     cta: 'Contact Sales',
-    comingSoon: true,
+    contactSales: true,
+    inherits: 'Everything in Growth, plus:',
     features: [
-      '15 Instagram accounts',
-      '100,000 automated DMs / month',
-      'Unlimited team',
       'White-label reports',
       'Agency dashboard',
+      'Unlimited team & workspaces',
       'Premium support',
     ],
   },

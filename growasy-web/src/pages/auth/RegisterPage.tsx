@@ -23,7 +23,8 @@ export function RegisterPage() {
   // Plan carried over from the pricing page (?plan=); defaults to Free.
   const [searchParams] = useSearchParams();
   const requested = PLANS.find((p) => p.key === (searchParams.get('plan') ?? '').toUpperCase());
-  const selectedPlan = requested ?? PLANS[0];
+  // Sales-led plans aren't self-serve — fall back to Free.
+  const selectedPlan = requested && !requested.contactSales ? requested : PLANS[0];
   const planKey: PlanKey = selectedPlan.key;
 
   const {

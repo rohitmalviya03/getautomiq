@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
+import { ReconnectBanner } from '@/components/layout/ReconnectBanner';
 
 export function DashboardLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -50,9 +51,12 @@ export function DashboardLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenuClick={() => setMobileNavOpen(true)} />
-        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
-          <Outlet />
-        </main>
+        <div className="flex-1 overflow-y-auto">
+          <ReconnectBanner />
+          <main className="px-4 py-6 sm:px-6 lg:px-8">
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   );

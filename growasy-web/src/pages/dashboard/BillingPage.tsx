@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Sparkles } from 'lucide-react';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/toast-context';
+import { useAuthStore } from '@/stores/auth-store';
 import { organizationsApi, type OrgUsage } from '@/lib/organizations-api';
-import { PLANS, DM_ADDONS } from '@/lib/plans';
+import { PLANS, DM_ADDONS, SALES_EMAIL, type Plan } from '@/lib/plans';
+import { billingApi } from '@/lib/billing-api';
+import { loadRazorpay } from '@/lib/razorpay';
+import { ApiError } from '@/lib/api-client';
 
 function fmt(n: number): string {
   return n < 0 ? '∞' : n.toLocaleString();
@@ -39,7 +43,10 @@ function UsageMeter({ label, used, limit }: { label: string; used: number; limit
 
 export function BillingPage() {
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
   const [yearly, setYearly] = useState(false);
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
   const usageQuery = useQuery<OrgUsage>({
     queryKey: ['organizations', 'usage'],
     queryFn: organizationsApi.getUsage,
@@ -47,13 +54,69 @@ export function BillingPage() {
   const usage = usageQuery.data;
   const currentPlan = usage?.planName ?? null;
 
-  const onSelect = (planTag: string) => {
-    if (planTag === currentPlan) return;
-    showToast({
-      variant: 'info',
-      title: 'Let’s get you upgraded',
-      description: `Contact support to move to ${planTag} — self-serve checkout is coming soon.`,
-    });
+  const startCheckout = async (plan: Plan) => {
+    const key = plan.key as 'STARTER' | 'GROWTH';
+    const cycle = yearly ? 'yearly' : 'monthly';
+    setBusyPlan(plan.key);
+    try {
+      const order = await billingApi.checkout(key, cycle);
+      const ready = await loadRazorpay();
+      if (!ready || !window.Razorpay) {
+        showToast({ variant: 'error', title: 'Couldn’t load the payment window' });
+        setBusyPlan(null);
+        return;
+      }
+      const rzp = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.orderId,
+        name: 'Automiq',
+        description: `${order.planName} · ${cycle}`,
+        prefill: {
+          name: user ? `${user.firstName} ${user.lastName}`.trim() : undefined,
+          email: user?.email,
+        },
+        theme: { color: '#8232d6' },
+        modal: { ondismiss: () => setBusyPlan(null) },
+        handler: async (resp) => {
+          try {
+            await billingApi.verify({ ...resp, plan: key, cycle });
+            await queryClient.invalidateQueries({ queryKey: ['organizations', 'usage'] });
+            showToast({ variant: 'success', title: `You’re on the ${plan.tag} plan 🎉` });
+          } catch {
+            showToast({
+              variant: 'error',
+              title: 'Payment verification failed',
+              description: 'If money was deducted it will be refunded, or contact support.',
+            });
+          } finally {
+            setBusyPlan(null);
+          }
+        },
+      });
+      rzp.open();
+    } catch (e) {
+      showToast({
+        variant: 'error',
+        title: 'Checkout failed',
+        description: e instanceof ApiError ? e.message : 'Please try again.',
+      });
+      setBusyPlan(null);
+    }
+  };
+
+  const onSelect = (plan: Plan) => {
+    if (plan.tag === currentPlan) return;
+    if (plan.key === 'STARTER' || plan.key === 'GROWTH') {
+      void startCheckout(plan);
+    } else {
+      showToast({
+        variant: 'info',
+        title: 'Manage plan',
+        description: `Contact support to switch to ${plan.tag}.`,
+      });
+    }
   };
 
   return (
@@ -165,40 +228,77 @@ export function BillingPage() {
                 <span className="font-display text-base font-bold text-slate-900 dark:text-white">
                   {plan.tag}
                 </span>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="font-display text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-                    {yearly ? plan.priceYearly : plan.priceMonthly}
-                  </span>
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
-                    {plan.priceMonthly === '₹0' ? '' : yearly ? '/year' : '/month'}
-                  </span>
-                </div>
-                <p className="mt-0.5 min-h-[18px] text-xs text-slate-400">
-                  {plan.priceMonthly === '₹0'
-                    ? 'Free forever'
-                    : yearly
-                      ? '2 months free · billed annually'
-                      : 'Billed monthly'}
-                </p>
-                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{plan.subtitle}</p>
 
-                <Button
-                  variant={isCurrent ? 'secondary' : plan.popular ? 'primary' : 'secondary'}
-                  className="mt-4 w-full justify-center"
-                  disabled={isCurrent}
-                  onClick={() => onSelect(plan.tag)}
-                >
-                  {isCurrent ? 'Current plan' : plan.cta}
-                </Button>
+                {plan.contactSales ? (
+                  <>
+                    <div className="mt-2">
+                      <span className="font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                        Let’s talk
+                      </span>
+                    </div>
+                    <p className="mt-0.5 min-h-[18px] text-xs text-slate-400">
+                      Custom pricing &amp; limits
+                    </p>
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                      {plan.subtitle}
+                    </p>
+                    <a
+                      href={`mailto:${SALES_EMAIL}?subject=Automiq%20Agency%20plan`}
+                      className="mt-4 block"
+                    >
+                      <Button variant="secondary" className="w-full justify-center">
+                        Contact Sales
+                      </Button>
+                    </a>
+                    <p className="mt-5 text-sm text-slate-500 dark:text-slate-400">
+                      Everything in Growth, plus white-label reports, unlimited team &amp;
+                      workspaces, and premium support.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="font-display text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                        {yearly ? plan.priceYearly : plan.priceMonthly}
+                      </span>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {plan.priceMonthly === '₹0' ? '' : yearly ? '/year' : '/month'}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 min-h-[18px] text-xs text-slate-400">
+                      {plan.priceMonthly === '₹0'
+                        ? 'Free forever'
+                        : yearly
+                          ? '2 months free · billed annually'
+                          : 'Billed monthly'}
+                    </p>
+                    <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                      {plan.subtitle}
+                    </p>
 
-                <ul className="mt-5 space-y-2.5">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
+                    <Button
+                      variant={isCurrent ? 'secondary' : plan.popular ? 'primary' : 'secondary'}
+                      className="mt-4 w-full justify-center"
+                      disabled={isCurrent || busyPlan !== null}
+                      isLoading={busyPlan === plan.key}
+                      onClick={() => onSelect(plan)}
+                    >
+                      {isCurrent ? 'Current plan' : plan.cta}
+                    </Button>
+
+                    <ul className="mt-5 space-y-2.5">
+                      {plan.features.map((f) => (
+                        <li
+                          key={f}
+                          className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300"
+                        >
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
             );
           })}

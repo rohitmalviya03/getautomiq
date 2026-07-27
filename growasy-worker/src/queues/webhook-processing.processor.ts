@@ -50,6 +50,33 @@ function parseJson<T>(value: string | null | undefined): T | null {
   }
 }
 
+/** Words that mean "stop messaging me" — matched as a standalone reply. */
+const OPT_OUT_WORDS = new Set([
+  'stop',
+  'stop all',
+  'stopall',
+  'unsubscribe',
+  'cancel',
+  'opt out',
+  'optout',
+  'remove me',
+  'no more',
+]);
+
+/**
+ * True when a DM is an opt-out request. Kept conservative — matches only when the
+ * whole (short) message is an opt-out phrase, so "stop it's so good" doesn't
+ * accidentally unsubscribe someone.
+ */
+export function isOptOut(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/[!.।,]+$/g, '');
+  return OPT_OUT_WORDS.has(t);
+}
+
 /**
  * Stage 1 of the comment → DM pipeline. Idempotent: every terminal outcome
  * records a `processed_comments` row keyed on the (unique) comment id, so a
@@ -243,6 +270,37 @@ export async function processWebhookMessage(
       instagramAccountId: account.id,
       outcome: 'self_comment',
     });
+    return;
+  }
+
+  // Opt-out: a "STOP"/"unsubscribe" DM unsubscribes the contact so no rule ever
+  // DMs them again. Honored before anything else (even lead capture).
+  if (!isStoryReply && isOptOut(text)) {
+    const created = await recordProcessed(prisma, {
+      commentId: messageId,
+      commenterId: senderId,
+      mediaId: null,
+      instagramAccountId: account.id,
+      outcome: 'opted_out',
+    });
+    if (created) {
+      await prisma.contact.upsert({
+        where: {
+          instagramAccountId_instagramScopedId: {
+            instagramAccountId: account.id,
+            instagramScopedId: senderId,
+          },
+        },
+        update: { isSubscribed: false },
+        create: {
+          organizationId: account.organizationId,
+          instagramAccountId: account.id,
+          instagramScopedId: senderId,
+          isSubscribed: false,
+        },
+      });
+    }
+    logOutcome({ ...logBase, outcome: 'opted_out' });
     return;
   }
 

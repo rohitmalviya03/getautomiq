@@ -17,6 +17,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { ContactsModule } from './modules/contacts/contacts.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { LinksModule } from './modules/links/links.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HealthModule } from './modules/health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -56,6 +57,7 @@ import { FeatureGuard } from './common/guards/feature.guard';
     ContactsModule,
     AnalyticsModule,
     LinksModule,
+    NotificationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

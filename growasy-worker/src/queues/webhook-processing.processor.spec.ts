@@ -324,6 +324,34 @@ describe('processWebhookComment', () => {
     );
   });
 
+  it('unsubscribes the contact and stops on an opt-out DM', async () => {
+    const prisma = makePrisma({
+      contact: { upsert: vi.fn().mockResolvedValue({}), updateMany: vi.fn() },
+      automationRule: { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn() },
+    });
+    const automationQueue = makeQueue();
+
+    await processWebhookMessage(
+      {
+        messageId: 'msg-stop',
+        text: 'STOP',
+        senderId: 'sender-9',
+        isStoryReply: false,
+        instagramBusinessAccountId: 'ig-biz-1',
+        rawEventTimestamp: 1,
+      },
+      { prisma, automationQueue },
+    );
+
+    expect(prisma.contact.upsert as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({ update: { isSubscribed: false } }),
+    );
+    expect(automationQueue.add).not.toHaveBeenCalled();
+    expect(prisma.processedComment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ outcome: 'opted_out' }) }),
+    );
+  });
+
   it('does not enqueue twice when the ledger insert loses a race (P2002)', async () => {
     const p2002 = Object.assign(new Error('unique'), { code: 'P2002' });
     Object.setPrototypeOf(

@@ -1,6 +1,7 @@
 import { Menu } from 'lucide-react';
 import { OrgSwitcher } from '@/components/layout/OrgSwitcher';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 import { UserMenu } from '@/components/layout/UserMenu';
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
@@ -19,6 +20,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <ThemeToggle />
         <UserMenu />
       </div>

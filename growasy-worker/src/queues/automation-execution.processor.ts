@@ -134,12 +134,30 @@ export async function processAutomationExecution(
     return;
   }
 
-  // Rate limit: cap automated DMs to this commenter for this rule per 24h.
+  // Respect opt-outs: never message a contact who unsubscribed (replied STOP).
+  const contact = await prisma.contact.findUnique({
+    where: {
+      instagramAccountId_instagramScopedId: {
+        instagramAccountId: account.id,
+        instagramScopedId: commenterId,
+      },
+    },
+    select: { isSubscribed: true },
+  });
+  if (contact && !contact.isSubscribed) {
+    logOutcome({ ...logBase, organizationId: org, outcome: 'unsubscribed' });
+    await markProcessed(prisma, eventId, { outcome: 'unsubscribed' });
+    return;
+  }
+
+  // Layer B — per-contact rate limit: cap automated DMs to this Instagram user
+  // across ALL rules on this account per 24h. Keeps us from spamming one person
+  // (and getting the account flagged by Meta), independent of the monthly quota.
   const maxDms = resolveRateLimit(rule);
   const recentDms = await prisma.processedComment.count({
     where: {
       commenterId,
-      ruleId,
+      instagramAccountId: account.id,
       dmSent: true,
       createdAt: { gte: new Date(Date.now() - RATE_WINDOW_MS) },
     },
