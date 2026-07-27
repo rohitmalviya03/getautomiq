@@ -35,7 +35,7 @@ export const PLANS: Plan[] = [
     cta: 'Get Started Free',
     features: [
       '1 Instagram account',
-      '500 automated DMs / month',
+      '100 automated DMs / month',
       'Comment → DM',
       'Story reply automation',
       'Unlimited keyword rules',

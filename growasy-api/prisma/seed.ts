@@ -58,11 +58,11 @@ async function seedPlans() {
         maxContacts: 500,
         maxAutomations: 10,
         maxTeamMembers: 1,
-        maxMessagesPerMonth: 500,
+        maxMessagesPerMonth: 100,
       },
       features: [
         '1 Instagram account',
-        '500 DMs / month',
+        '100 DMs / month',
         'Comment → DM + story replies',
         'Unlimited keyword rules',
         'Basic analytics',
