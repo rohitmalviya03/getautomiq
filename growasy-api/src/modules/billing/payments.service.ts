@@ -12,7 +12,11 @@ import { RazorpayService } from './razorpay.service';
 /** Billing cycles the checkout accepts. */
 export type BillingCycleInput = 'monthly' | 'yearly';
 /** Only these tiers are self-serve purchasable (Free = free, Agency = sales-led). */
-const PURCHASABLE: OrgPlanTier[] = [OrgPlanTier.STARTER, OrgPlanTier.GROWTH];
+const PURCHASABLE: OrgPlanTier[] = [
+  OrgPlanTier.STARTER,
+  OrgPlanTier.GROWTH,
+  OrgPlanTier.PROFESSIONAL,
+];
 
 @Injectable()
 export class PaymentsService {

@@ -7,6 +7,7 @@ export const SELECTABLE_PLANS = [
   OrgPlanTier.FREE,
   OrgPlanTier.STARTER,
   OrgPlanTier.GROWTH,
+  OrgPlanTier.PROFESSIONAL,
 ] as const;
 
 export class RegisterDto {

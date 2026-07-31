@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useThemeStore } from '@/stores/theme-store';
 import { useAuthStore } from '@/stores/auth-store';
-import { PLANS, DM_ADDONS, SALES_EMAIL } from '@/lib/plans';
+import { PLANS, SALES_EMAIL } from '@/lib/plans';
 import { useSeo, faqJsonLd } from '@/lib/use-seo';
 
 const FEATURES: { icon: LucideIcon; title: string; desc: string; tags: string[] }[] = [
@@ -87,7 +87,7 @@ const FAQS = [
   },
   {
     q: 'Do you charge based on contacts?',
-    a: 'Never. Automiq is not contact-based billing. Paid plans include unlimited contacts — you only ever pay for your plan and any DM top-ups you choose.',
+    a: 'Never. Automiq is not contact-based billing. Paid plans include unlimited contacts — you only ever pay for your plan.',
   },
   {
     q: 'Can I cancel anytime?',
@@ -476,23 +476,6 @@ export function LandingPage() {
               <Check size={15} /> Official Instagram API
             </span>
           </div>
-
-          {/* Pay-as-you-go DM top-ups */}
-          <div className="aql-addons">
-            <div className="aql-addons-head">
-              <h3>Need more DMs? Top up any time.</h3>
-              <p>One-time DM packs that stack on your plan and never expire.</p>
-            </div>
-            <div className="aql-addon-grid">
-              {DM_ADDONS.map((a) => (
-                <div className="aql-addon" key={a.dms}>
-                  <span className="aql-addon-dms">{a.dms}</span>
-                  <span className="aql-addon-lbl">DMs</span>
-                  <span className="aql-addon-price">{a.price}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 
@@ -689,8 +672,9 @@ const CSS = `
 .aql-2mo { font-size: 12.5px; font-weight: 600; color: var(--orange); opacity: 0; transition: opacity .2s ease; height: 16px; }
 .aql-2mo.show { opacity: 1; }
 
-.aql-price-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: stretch; }
-@media (max-width: 1040px) { .aql-price-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; } }
+.aql-price-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-items: stretch; }
+@media (max-width: 1200px) { .aql-price-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; } }
+@media (max-width: 820px) { .aql-price-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .aql-price-grid { grid-template-columns: 1fr; } }
 .aql-plan { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 22px; padding: 28px 24px; display: flex; flex-direction: column; transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
 .aql-plan:hover { transform: translateY(-6px); box-shadow: var(--shadow); border-color: var(--glass-brd); }

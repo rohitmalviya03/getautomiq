@@ -1,12 +1,27 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { BarChart3, MessageSquare, Send, Target, Users } from 'lucide-react';
+import { useQuery, useQueries } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import {
+  BarChart3,
+  ExternalLink,
+  Film,
+  Image as ImageIcon,
+  Lock,
+  MessageSquare,
+  Send,
+  Target,
+  Users,
+} from 'lucide-react';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { analyticsApi } from '@/lib/analytics-api';
-import type { AnalyticsOverview } from '@/types/api';
+import { organizationsApi } from '@/lib/organizations-api';
+import { instagramApi } from '@/lib/instagram-api';
+import { planRank, PLAN_RANK } from '@/lib/plans';
+import type { AnalyticsOverview, InstagramMedia } from '@/types/api';
 
 // Single brand hue for every data mark (no categorical palette → no CVD concern).
 const HUE = '#8232d6';
@@ -285,7 +300,151 @@ export function AnalyticsPage() {
             </div>
           </>
         )}
+
+        <PostAnalyticsSection days={days} />
       </div>
     </PageTransition>
+  );
+}
+
+/** Per-post / per-reel automation performance — gated to Starter (₹149) & above. */
+function PostAnalyticsSection({ days }: { days: number }) {
+  const usageQuery = useQuery({
+    queryKey: ['organizations', 'usage'],
+    queryFn: organizationsApi.getUsage,
+  });
+  const rank = usageQuery.data ? planRank(usageQuery.data.planName) : Infinity;
+  const canAccess = rank >= PLAN_RANK.STARTER;
+
+  const postsQuery = useQuery({
+    queryKey: ['analytics', 'posts', days],
+    queryFn: () => analyticsApi.posts(days),
+    enabled: canAccess,
+  });
+  const posts = postsQuery.data?.posts ?? [];
+
+  // Enrich each post with its thumbnail/permalink from the account's media.
+  const accountIds = [...new Set(posts.map((p) => p.instagramAccountId))];
+  const mediaQueries = useQueries({
+    queries: accountIds.map((id) => ({
+      queryKey: ['instagram', 'media', id],
+      queryFn: () => instagramApi.listMedia(id),
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+  const mediaMap = new Map<string, InstagramMedia>();
+  mediaQueries.forEach((q) => (q.data ?? []).forEach((m) => mediaMap.set(m.id, m)));
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <div>
+          <CardTitle>Post performance</CardTitle>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            How each post &amp; reel your automations run on is doing.
+          </p>
+        </div>
+        <span className="shrink-0 rounded-md bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+          Starter+
+        </span>
+      </CardHeader>
+      <CardContent>
+        {!usageQuery.data ? (
+          <Skeleton className="h-24 w-full" />
+        ) : !canAccess ? (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 py-8 text-center dark:border-white/10 dark:bg-white/[0.03]">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-950 dark:text-brand-300">
+              <Lock className="h-5 w-5" />
+            </span>
+            <p className="max-w-xs text-sm text-slate-600 dark:text-slate-300">
+              Post-wise analytics is available on <strong>Starter</strong> and above.
+            </p>
+            <Link to="/billing">
+              <Button size="sm">Upgrade plan</Button>
+            </Link>
+          </div>
+        ) : postsQuery.isLoading ? (
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : posts.length === 0 ? (
+          <EmptyState
+            icon={ImageIcon}
+            title="No post-level activity yet"
+            description="Once an automation runs on a specific post or reel, its stats show up here."
+          />
+        ) : (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {posts.map((p) => {
+              const media = mediaMap.get(p.mediaId);
+              const isReel =
+                media?.mediaProductType === 'REELS' || media?.mediaType === 'VIDEO';
+              return (
+                <li key={p.mediaId} className="flex items-center gap-3 py-3">
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
+                    {media?.thumbnailUrl ? (
+                      <img
+                        src={media.thumbnailUrl}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-slate-400">
+                        <ImageIcon className="h-5 w-5" />
+                      </div>
+                    )}
+                    {isReel ? (
+                      <span className="absolute right-0.5 top-0.5 rounded bg-black/60 p-0.5 text-white">
+                        <Film className="h-3 w-3" />
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {media?.caption?.trim() || p.ruleNames[0] || `Post ${p.mediaId.slice(-6)}`}
+                    </p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                      {p.ruleNames.length ? p.ruleNames.join(', ') : 'Automation'} ·{' '}
+                      {pct(p.matchRate)} match
+                    </p>
+                  </div>
+
+                  <div className="hidden gap-5 text-right sm:flex">
+                    <PostStat label="Comments" value={p.commentsProcessed} />
+                    <PostStat label="Matched" value={p.matched} />
+                    <PostStat label="DMs" value={p.dmsSent} />
+                  </div>
+
+                  {media?.permalink ? (
+                    <a
+                      href={media.permalink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="focus-ring shrink-0 rounded-md p-1.5 text-slate-400 hover:text-brand-600"
+                      aria-label="View post on Instagram"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PostStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-sm font-semibold text-slate-900 dark:text-white">{value}</p>
+      <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
+    </div>
   );
 }

@@ -5,9 +5,8 @@ import { logger } from '../logger/logger';
 import type { TokenDecryptor } from '../crypto/token-encryption';
 import { InstagramApiError, type MetaGraphClient } from '../instagram/meta-graph.client';
 import {
-  currentPeriod,
-  getMonthlyDmCount,
-  getMonthlyDmLimit,
+  decrementDmUsage,
+  getDmQuota,
   incrementDmUsage,
   notifyMonthlyDmLimit,
 } from '../billing/usage';
@@ -168,30 +167,36 @@ export async function processAutomationExecution(
     return;
   }
 
-  // Plan enforcement: cap DMs per org per calendar month. Only gates rules that
-  // actually send a DM; unlimited plans / no subscription → no cap.
-  const period = currentPeriod();
-  const willSendDm = rule.actions.some((a) => a.type === 'SEND_DM');
-  if (willSendDm) {
-    const dmLimit = await getMonthlyDmLimit(prisma, org);
-    if (dmLimit !== null) {
-      const usedThisMonth = await getMonthlyDmCount(prisma, org, period);
-      if (usedThisMonth >= dmLimit) {
-        logOutcome({
-          ...logBase,
-          organizationId: org,
-          outcome: 'plan_limit_reached',
-          usedThisMonth,
-          dmLimit,
-        });
-        await markProcessed(prisma, eventId, { outcome: 'plan_limit_reached' });
-        await notifyMonthlyDmLimit(prisma, org, account.connectedByUserId, period);
-        return;
-      }
-    }
-  }
+  // Plan enforcement: monthly DM quota, reset per the org's BILLING period.
+  // `getDmQuota` returns the limit + the billing-anchored period key in one query.
+  const { limit: dmLimit, period } = await getDmQuota(prisma, org);
+
+  const dmAction = rule.actions.find((a) => a.type === 'SEND_DM');
+  const dmConfig = parseJson<ActionConfig>(dmAction?.config ?? null);
+  const dmText = renderTemplate(dmConfig?.text ?? '');
+  const willSendDm = Boolean(dmAction && dmText);
 
   const token = decryptor.decrypt(account.accessTokenEncrypted);
+
+  // Reserve a DM slot up-front with an ATOMIC increment, then check the returned
+  // count. This closes the check-then-increment race: concurrent workers can't
+  // both slip past the cap. Over the cap → release the slot and stop.
+  if (willSendDm) {
+    const reservedCount = await incrementDmUsage(prisma, org, period);
+    if (dmLimit !== null && reservedCount > dmLimit) {
+      await decrementDmUsage(prisma, org, period);
+      logOutcome({
+        ...logBase,
+        organizationId: org,
+        outcome: 'plan_limit_reached',
+        usedThisMonth: reservedCount - 1,
+        dmLimit,
+      });
+      await markProcessed(prisma, eventId, { outcome: 'plan_limit_reached' });
+      await notifyMonthlyDmLimit(prisma, org, account.connectedByUserId, period);
+      return;
+    }
+  }
 
   // Public comment reply FIRST (comment trigger only). It uses the comments
   // permission — independent of messaging — so it still posts even when DM
@@ -213,18 +218,13 @@ export async function processAutomationExecution(
   }
 
   // Send the DM (the primary action) — its result drives the job outcome.
-  const dmAction = rule.actions.find((a) => a.type === 'SEND_DM');
-  const dmConfig = parseJson<ActionConfig>(dmAction?.config ?? null);
-  const dmText = renderTemplate(dmConfig?.text ?? '');
   try {
-    if (dmAction && dmText) {
+    if (willSendDm) {
       if (source === 'message') {
         await metaClient.sendDm(recipientId, dmText, token);
       } else {
         await metaClient.sendDmToComment(eventId, dmText, token);
       }
-      // Count the DM against the org's monthly quota (atomic increment).
-      await incrementDmUsage(prisma, org, period);
 
       // Lead capture: now that the ask-for-email DM is out, start listening for
       // this contact's next reply. Keyed on the commenter/sender IGSID, which is
@@ -242,6 +242,11 @@ export async function processAutomationExecution(
     await markProcessed(prisma, eventId, { matched: true, dmSent: true, outcome: 'dm_sent' });
     logOutcome({ ...logBase, organizationId: org, outcome: 'dm_sent' });
   } catch (error) {
+    // The send failed — release the reserved DM slot so the counter only ever
+    // reflects successful sends.
+    if (willSendDm) {
+      await decrementDmUsage(prisma, org, period);
+    }
     const message = error instanceof Error ? error.message : 'unknown error';
 
     if (error instanceof InstagramApiError && error.isAuthError) {
@@ -288,9 +293,10 @@ export async function processSendLeadReply(
   }
 
   const token = decryptor.decrypt(account.accessTokenEncrypted);
+  const { period } = await getDmQuota(prisma, organizationId);
   try {
     await metaClient.sendDm(recipientId, text, token);
-    await incrementDmUsage(prisma, organizationId, currentPeriod());
+    await incrementDmUsage(prisma, organizationId, period);
     logOutcome({ ...logBase, outcome: 'sent' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';

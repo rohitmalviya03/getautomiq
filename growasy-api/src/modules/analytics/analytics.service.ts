@@ -10,6 +10,15 @@ interface DayCountRow {
   cnt: bigint | number;
 }
 
+interface PostStatRow {
+  mediaId: string;
+  accountId: string;
+  total: bigint | number;
+  matched: bigint | number | null;
+  dmSent: bigint | number | null;
+  lastAt: Date | string;
+}
+
 function toDateKey(value: Date | string): string {
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
 }
@@ -133,6 +142,89 @@ export class AnalyticsService {
         dmsSent: g._count._all,
       })),
       usage: { dmsUsedThisMonth: usage.dmsUsedThisMonth, dmsLimit: usage.dmsLimit },
+    };
+  }
+
+  /**
+   * Per-post / per-reel analytics: for each media that automations ran on,
+   * how many comments were processed, matched, and DM'd — plus the rules bound
+   * to it. Gated to Starter+ at the controller (@RequireFeature ANALYTICS).
+   */
+  async getPostAnalytics(organizationId: string, rangeDays = DEFAULT_RANGE_DAYS) {
+    const accounts = await this.prisma.instagramAccount.findMany({
+      where: { organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    const accountIds = accounts.map((a) => a.id);
+    if (accountIds.length === 0) return { rangeDays, posts: [] };
+
+    const dateFrom = new Date(Date.now() - rangeDays * 24 * 60 * 60 * 1000);
+
+    const rows = await this.prisma.$queryRaw<PostStatRow[]>(Prisma.sql`
+        SELECT mediaId,
+               instagramAccountId AS accountId,
+               COUNT(*)        AS total,
+               SUM(matched)    AS matched,
+               SUM(dmSent)     AS dmSent,
+               MAX(createdAt)  AS lastAt
+        FROM ProcessedComment
+        WHERE mediaId IS NOT NULL
+          AND instagramAccountId IN (${Prisma.join(accountIds)})
+          AND createdAt >= ${dateFrom}
+        GROUP BY mediaId, instagramAccountId
+        ORDER BY total DESC
+        LIMIT 50
+      `);
+    if (rows.length === 0) return { rangeDays, posts: [] };
+
+    // Which rule(s) fired on each media.
+    const mediaIds = rows.map((r) => r.mediaId);
+    const ruleGroups = await this.prisma.processedComment.groupBy({
+      by: ['mediaId', 'ruleId'],
+      where: {
+        instagramAccountId: { in: accountIds },
+        mediaId: { in: mediaIds },
+        ruleId: { not: null },
+        createdAt: { gte: dateFrom },
+      },
+    });
+    const ruleIds = [...new Set(ruleGroups.map((g) => g.ruleId).filter((id): id is string => !!id))];
+    const ruleName = new Map(
+      (
+        await this.prisma.automationRule.findMany({
+          where: { id: { in: ruleIds } },
+          select: { id: true, name: true },
+        })
+      ).map((r) => [r.id, r.name]),
+    );
+    const rulesByMedia = new Map<string, string[]>();
+    for (const g of ruleGroups) {
+      if (!g.mediaId || !g.ruleId) continue;
+      const name = ruleName.get(g.ruleId);
+      if (!name) continue;
+      const arr = rulesByMedia.get(g.mediaId) ?? [];
+      if (!arr.includes(name)) arr.push(name);
+      rulesByMedia.set(g.mediaId, arr);
+    }
+
+    return {
+      rangeDays,
+      posts: rows.map((r) => {
+        const commentsProcessed = Number(r.total);
+        const matched = Number(r.matched ?? 0);
+        const dmsSent = Number(r.dmSent ?? 0);
+        return {
+          mediaId: r.mediaId,
+          instagramAccountId: r.accountId,
+          commentsProcessed,
+          matched,
+          dmsSent,
+          matchRate: ratio(matched, commentsProcessed),
+          dmDeliveryRate: ratio(dmsSent, matched),
+          ruleNames: rulesByMedia.get(r.mediaId) ?? [],
+          lastActivityAt: r.lastAt instanceof Date ? r.lastAt.toISOString() : String(r.lastAt),
+        };
+      }),
     };
   }
 

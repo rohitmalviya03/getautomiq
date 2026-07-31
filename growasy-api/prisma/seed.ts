@@ -51,6 +51,7 @@ async function seedPlans() {
     {
       name: 'Free',
       tier: 'FREE' as const,
+      currency: 'INR',
       monthlyPrice: 0,
       yearlyPrice: 0,
       limits: {
@@ -58,11 +59,13 @@ async function seedPlans() {
         maxContacts: 500,
         maxAutomations: 10,
         maxTeamMembers: 1,
-        maxMessagesPerMonth: 100,
+        maxMessagesPerMonth: 500,
+        aiAgent: false,
       },
       features: [
         '1 Instagram account',
-        '100 DMs / month',
+        '500 DMs / month',
+        '1 team member',
         'Comment → DM + story replies',
         'Unlimited keyword rules',
         'Basic analytics',
@@ -71,69 +74,108 @@ async function seedPlans() {
     {
       name: 'Starter',
       tier: 'STARTER' as const,
-      monthlyPrice: 79900,
-      yearlyPrice: 769000,
+      currency: 'INR',
+      monthlyPrice: 14900,
+      yearlyPrice: 143000,
       limits: {
         maxInstagramAccounts: 2,
         maxContacts: -1,
         maxAutomations: -1,
         maxTeamMembers: 1,
         maxMessagesPerMonth: 5000,
+        aiAgent: false,
       },
       features: [
         '2 Instagram accounts',
         '5,000 DMs / month',
-        'CRM + unlimited contacts',
-        'Email capture · AI tools',
-        'Link tracking + export',
-        'Priority email support',
+        '1 team member',
+        'Unlimited contacts + CRM',
+        'Email capture',
+        'AI caption & hashtag tools',
+        'Link tracking + CSV export',
+        'No Automiq branding',
       ],
     },
     {
       name: 'Growth',
       tier: 'GROWTH' as const,
-      monthlyPrice: 149900,
-      yearlyPrice: 1439000,
+      currency: 'INR',
+      monthlyPrice: 49900,
+      yearlyPrice: 479000,
       limits: {
         maxInstagramAccounts: 5,
         maxContacts: -1,
         maxAutomations: -1,
         maxTeamMembers: 5,
         maxMessagesPerMonth: 20000,
+        aiAgent: true,
       },
       features: [
         '5 Instagram accounts',
         '20,000 DMs / month',
         '5 team members',
-        'Advanced analytics · custom fields',
-        'Multiple workspaces',
+        'AI DM Agent',
+        'Broadcast / bulk DM',
+        'Advanced analytics',
+        'Workflow templates · custom fields',
+        'Multiple workspaces · priority queue',
+      ],
+    },
+    {
+      // Displayed as "Pro" — mapped onto the PROFESSIONAL tier.
+      name: 'Pro',
+      tier: 'PROFESSIONAL' as const,
+      currency: 'INR',
+      monthlyPrice: 99900,
+      yearlyPrice: 959000,
+      limits: {
+        maxInstagramAccounts: 10,
+        maxContacts: -1,
+        maxAutomations: -1,
+        maxTeamMembers: 10,
+        maxMessagesPerMonth: 50000,
+        aiAgent: true,
+      },
+      features: [
+        '10 Instagram accounts',
+        '50,000 DMs / month',
+        '10 team members',
+        'AI DM Agent + custom training',
+        'A/B testing',
+        'Revenue attribution',
+        'API access',
       ],
     },
     {
       name: 'Agency',
       tier: 'AGENCY' as const,
-      monthlyPrice: 399900,
-      yearlyPrice: 3839000,
+      currency: 'INR',
+      // Custom / contact-sales — not self-serve, so price is not used for checkout.
+      monthlyPrice: 0,
+      yearlyPrice: 0,
       limits: {
         maxInstagramAccounts: 15,
         maxContacts: -1,
         maxAutomations: -1,
         maxTeamMembers: -1,
         maxMessagesPerMonth: 100000,
+        aiAgent: true,
       },
       features: [
         '15 Instagram accounts',
         '100,000 DMs / month',
         'Unlimited team',
-        'White-label reports · agency dashboard',
-        'Premium support',
+        'AI DM Agent',
+        'White-label reports',
+        'Agency dashboard',
+        'Dedicated manager',
       ],
     },
   ];
 
-  // Retire the tiers that are no longer offered so they can't be assigned.
+  // Retire tiers no longer offered (ENTERPRISE). PROFESSIONAL is now "Pro".
   await prisma.plan.updateMany({
-    where: { tier: { in: ['PROFESSIONAL', 'ENTERPRISE'] } },
+    where: { tier: { in: ['ENTERPRISE'] } },
     data: { isActive: false },
   });
 
@@ -143,6 +185,7 @@ async function seedPlans() {
     // any code that reads them back must JSON.parse().
     const data = {
       ...plan,
+      isActive: true, // re-activate offered tiers (PROFESSIONAL was previously retired)
       limits: JSON.stringify(plan.limits),
       features: JSON.stringify(plan.features),
     };

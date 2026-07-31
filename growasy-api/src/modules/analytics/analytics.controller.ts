@@ -3,7 +3,9 @@ import { ApiBearerAuth, ApiHeader, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { CurrentOrgId } from '../../common/decorators/current-org.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 import { PERMISSIONS } from '../../common/constants/permissions.constant';
+import { PLAN_FEATURES } from '../../common/constants/plan-features.constant';
 
 @ApiTags('analytics')
 @ApiBearerAuth()
@@ -22,5 +24,16 @@ export class AnalyticsController {
     const parsed = Number(days);
     const rangeDays = Number.isFinite(parsed) ? Math.min(Math.max(Math.trunc(parsed), 1), 90) : 30;
     return this.analyticsService.getOverview(organizationId, rangeDays);
+  }
+
+  /** Per-post / per-reel automation performance. Starter (₹149) and above. */
+  @Get('posts')
+  @RequirePermissions(PERMISSIONS.ANALYTICS_READ)
+  @RequireFeature(PLAN_FEATURES.ANALYTICS)
+  @ApiQuery({ name: 'days', required: false, description: 'Lookback window (default 30, max 90)' })
+  posts(@CurrentOrgId() organizationId: string, @Query('days') days?: string) {
+    const parsed = Number(days);
+    const rangeDays = Number.isFinite(parsed) ? Math.min(Math.max(Math.trunc(parsed), 1), 90) : 30;
+    return this.analyticsService.getPostAnalytics(organizationId, rangeDays);
   }
 }

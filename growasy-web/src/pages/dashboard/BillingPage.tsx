@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/toast-context';
 import { useAuthStore } from '@/stores/auth-store';
 import { organizationsApi, type OrgUsage } from '@/lib/organizations-api';
-import { PLANS, DM_ADDONS, SALES_EMAIL, type Plan } from '@/lib/plans';
+import { PLANS, SALES_EMAIL, type Plan } from '@/lib/plans';
 import { billingApi } from '@/lib/billing-api';
 import { loadRazorpay } from '@/lib/razorpay';
 import { ApiError } from '@/lib/api-client';
@@ -55,7 +55,7 @@ export function BillingPage() {
   const currentPlan = usage?.planName ?? null;
 
   const startCheckout = async (plan: Plan) => {
-    const key = plan.key as 'STARTER' | 'GROWTH';
+    const key = plan.key as 'STARTER' | 'GROWTH' | 'PROFESSIONAL';
     const cycle = yearly ? 'yearly' : 'monthly';
     setBusyPlan(plan.key);
     try {
@@ -108,7 +108,7 @@ export function BillingPage() {
 
   const onSelect = (plan: Plan) => {
     if (plan.tag === currentPlan) return;
-    if (plan.key === 'STARTER' || plan.key === 'GROWTH') {
+    if (plan.key === 'STARTER' || plan.key === 'GROWTH' || plan.key === 'PROFESSIONAL') {
       void startCheckout(plan);
     } else {
       showToast({
@@ -201,7 +201,7 @@ export function BillingPage() {
         </div>
 
         {/* Plan cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {PLANS.map((plan) => {
             const isCurrent = plan.tag === currentPlan;
             return (
@@ -304,49 +304,8 @@ export function BillingPage() {
           })}
         </div>
 
-        {/* Pay-as-you-go DM top-ups */}
-        <Card>
-          <CardContent className="py-5">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
-                  Need more DMs?
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  One-time packs that stack on your plan and never expire.
-                </p>
-              </div>
-              <span className="text-xs font-medium text-slate-400">Only pay for what you use</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {DM_ADDONS.map((a) => (
-                <button
-                  key={a.dms}
-                  type="button"
-                  onClick={() =>
-                    showToast({
-                      variant: 'info',
-                      title: 'DM pack',
-                      description: `${a.dms} DMs for ${a.price} — self-serve top-ups are coming soon.`,
-                    })
-                  }
-                  className="focus-ring rounded-xl border border-slate-200 bg-slate-50 p-4 text-center transition-colors hover:border-brand-300 dark:border-white/10 dark:bg-white/[0.03]"
-                >
-                  <span className="block font-display text-xl font-bold text-slate-900 dark:text-white">
-                    {a.dms}
-                  </span>
-                  <span className="mb-2 block text-[11px] uppercase tracking-wide text-slate-400">
-                    DMs
-                  </span>
-                  <span className="brand-gradient-text block font-bold">{a.price}</span>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         <p className="pb-4 text-center text-xs text-slate-400">
-          Prices in INR. No contact-based billing, no hidden charges — only pay for what you use.
+          Prices in INR. No contact-based billing, no hidden charges.
         </p>
       </div>
     </PageTransition>

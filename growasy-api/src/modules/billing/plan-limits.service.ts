@@ -17,6 +17,8 @@ export interface PlanLimits {
   maxMessagesPerMonth: number;
   maxContacts?: number;
   maxTeamMembers?: number;
+  /** Whether the AI DM Agent is enabled on this plan. */
+  aiAgent?: boolean;
 }
 
 export interface PlanContext {
@@ -27,11 +29,38 @@ export interface PlanContext {
   currentPeriodEnd: Date;
 }
 
-/** UTC calendar-month key, e.g. "2026-07" — matches UsageTracking.period. */
+/** UTC calendar-month key, e.g. "2026-07" — the fallback when there's no plan. */
 export function currentUsagePeriod(date = new Date()): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
   return `${y}-${m}`;
+}
+
+function daysInMonth(year: number, month0: number): number {
+  return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+}
+
+/**
+ * DM-quota period key aligned to the subscription's billing anchor — MUST match
+ * growasy-worker's `billingPeriodKey` so the displayed usage equals what the
+ * worker enforces. "YYYY-MM-DD" of the current window's start; falls back to the
+ * calendar month when there's no anchor.
+ */
+export function billingPeriodKey(anchor: Date | null | undefined, now = new Date()): string {
+  if (!anchor) return currentUsagePeriod(now);
+  const anchorDay = anchor.getUTCDate();
+  let y = now.getUTCFullYear();
+  let m = now.getUTCMonth();
+  const startThisMonth = Math.min(anchorDay, daysInMonth(y, m));
+  if (now.getUTCDate() < startThisMonth) {
+    m -= 1;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    }
+  }
+  const startDay = Math.min(anchorDay, daysInMonth(y, m));
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
 }
 
 /**
@@ -167,7 +196,7 @@ export class PlanLimitsService {
   /** Powers GET /organizations/me/usage — used/limit per metric + billing anchor. */
   async getUsageSummary(organizationId: string) {
     const ctx = await this.getPlanContext(organizationId);
-    const period = currentUsagePeriod();
+    const period = billingPeriodKey(ctx?.currentPeriodStart ?? null);
 
     const [accountsUsed, activeRulesUsed, membersUsed, dmUsage] = await Promise.all([
       this.prisma.instagramAccount.count({ where: { organizationId, deletedAt: null } }),

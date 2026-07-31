@@ -20,10 +20,11 @@
 - Instagram Engagement Rate Calculator: https://getautomiq.com/tools/engagement-rate-calculator
 
 ## Pricing (INR)
-- Free — ₹0/mo — 1 Instagram account, 100 DMs/month.
-- Starter — ₹799/mo — 2 accounts, 5,000 DMs/month, CRM, AI tools.
-- Growth (most popular) — ₹1,499/mo — 5 accounts, 20,000 DMs/month, team of 5.
-- Agency — ₹3,999/mo — 15 accounts, 100,000 DMs/month, white-label.
+- Free — ₹0/mo — 1 Instagram account, 500 DMs/month, 1 seat.
+- Starter — ₹149/mo (₹1,430/yr) — 2 accounts, 5,000 DMs/month, unlimited contacts, CRM, AI tools.
+- Growth (most popular) — ₹499/mo (₹4,790/yr) — 5 accounts, 20,000 DMs/month, 5 seats, AI DM Agent.
+- Pro — ₹999/mo (₹9,590/yr) — 10 accounts, 50,000 DMs/month, 10 seats, AI DM Agent, API access.
+- Agency — custom pricing — 15 accounts, 100,000 DMs/month, unlimited team, white-label.
 
 ## Key pages
 - Home: https://getautomiq.com/

@@ -3,7 +3,7 @@
  * in-app Plans page. `key` matches the backend OrgPlanTier so the choice can be
  * carried through registration and the current plan highlighted.
  */
-export type PlanKey = 'FREE' | 'STARTER' | 'GROWTH' | 'AGENCY';
+export type PlanKey = 'FREE' | 'STARTER' | 'GROWTH' | 'PROFESSIONAL' | 'AGENCY';
 
 export interface Plan {
   key: PlanKey;
@@ -35,70 +35,86 @@ export const PLANS: Plan[] = [
     cta: 'Get Started Free',
     features: [
       '1 Instagram account',
-      '100 automated DMs / month',
-      'Comment → DM',
-      'Story reply automation',
+      '500 automated DMs / month',
+      '1 team member',
+      'Comment → DM + story replies',
       'Unlimited keyword rules',
-      'Ready-made templates',
       'Basic analytics',
     ],
   },
   {
     key: 'STARTER',
     tag: 'Starter',
-    subtitle: 'Perfect for creators & small businesses.',
-    priceMonthly: '₹799',
-    priceYearly: '₹7,690',
+    subtitle: 'For creators & small businesses.',
+    priceMonthly: '₹149',
+    priceYearly: '₹1,430',
     cta: 'Start Free Trial',
     features: [
       '2 Instagram accounts',
-      '5,000 automated DMs / month',
-      'Unlimited contacts',
-      'CRM',
+      '5,000 DMs / month',
+      '1 team member',
+      'Unlimited contacts + CRM',
       'Email capture',
-      'AI caption generator',
-      'AI hashtag generator',
-      'Link tracking',
-      'Export contacts',
-      'Analytics dashboard',
-      'Priority email support',
+      'AI caption & hashtag tools',
+      'Link tracking + CSV export',
+      'No Automiq branding',
     ],
   },
   {
     key: 'GROWTH',
     tag: 'Growth',
-    subtitle: 'Built for businesses that generate leads every day.',
-    priceMonthly: '₹1,499',
-    priceYearly: '₹14,390',
+    subtitle: 'For businesses generating leads every day.',
+    priceMonthly: '₹499',
+    priceYearly: '₹4,790',
     cta: 'Start Growing',
     popular: true,
     bestValue: true,
-    inherits: 'Everything in Starter',
+    inherits: 'Everything in Starter, plus:',
     features: [
       '5 Instagram accounts',
-      '20,000 automated DMs / month',
-      'Team members (5)',
+      '20,000 DMs / month',
+      '5 team members',
+      'AI DM Agent',
+      'Broadcast / bulk DM',
       'Advanced analytics',
-      'Workflow templates',
-      'Multiple workspaces',
-      'Custom fields',
-      'Priority queue',
+      'Workflow templates · custom fields',
+      'Multiple workspaces · priority queue',
+    ],
+  },
+  {
+    key: 'PROFESSIONAL',
+    tag: 'Pro',
+    subtitle: 'For scaling teams & power users.',
+    priceMonthly: '₹999',
+    priceYearly: '₹9,590',
+    cta: 'Choose Pro',
+    inherits: 'Everything in Growth, plus:',
+    features: [
+      '10 Instagram accounts',
+      '50,000 DMs / month',
+      '10 team members',
+      'AI DM Agent + custom training',
+      'A/B testing',
+      'Revenue attribution',
+      'API access',
     ],
   },
   {
     key: 'AGENCY',
     tag: 'Agency',
-    subtitle: 'Built for agencies managing multiple clients.',
+    subtitle: 'For agencies managing multiple clients.',
     priceMonthly: 'Custom',
     priceYearly: 'Custom',
     cta: 'Contact Sales',
     contactSales: true,
-    inherits: 'Everything in Growth, plus:',
+    inherits: 'Everything in Pro, plus:',
     features: [
+      '15 Instagram accounts',
+      '100,000 DMs / month',
+      'Unlimited team',
       'White-label reports',
       'Agency dashboard',
-      'Unlimited team & workspaces',
-      'Premium support',
+      'Dedicated manager',
     ],
   },
 ];
@@ -107,7 +123,7 @@ export const PLANS: Plan[] = [
  * Plan tiers ranked low→high. Gates which app features/menu items a plan unlocks:
  * an item requiring rank N shows only when the current plan's rank ≥ N.
  */
-export const PLAN_RANK = { FREE: 0, STARTER: 1, GROWTH: 2, AGENCY: 3 } as const;
+export const PLAN_RANK = { FREE: 0, STARTER: 1, GROWTH: 2, PROFESSIONAL: 3, AGENCY: 4 } as const;
 
 /**
  * Maps a plan *name* (from GET /organizations/me/usage) to a rank. Unknown / no
@@ -118,19 +134,11 @@ export function planRank(planName: string | null | undefined): number {
   const byName: Record<string, number> = {
     Free: 0,
     Starter: 1,
-    Pro: 1,
-    Professional: 1,
     Growth: 2,
-    Agency: 3,
-    Enterprise: 3,
+    Pro: 3,
+    Professional: 3,
+    Agency: 4,
+    Enterprise: 4,
   };
   return byName[planName] ?? Infinity;
 }
-
-/** Pay-as-you-go DM top-ups. Bought on top of any plan; never expire. */
-export const DM_ADDONS: { dms: string; price: string }[] = [
-  { dms: '1,000', price: '₹299' },
-  { dms: '5,000', price: '₹999' },
-  { dms: '10,000', price: '₹1,799' },
-  { dms: '25,000', price: '₹3,999' },
-];

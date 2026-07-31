@@ -15,7 +15,7 @@ export interface RegisterPayload {
   lastName: string;
   organizationName?: string;
   /** Chosen plan tier (from the pricing page); backend puts the org on it. */
-  plan?: 'FREE' | 'STARTER' | 'GROWTH' | 'AGENCY';
+  plan?: 'FREE' | 'STARTER' | 'GROWTH' | 'PROFESSIONAL' | 'AGENCY';
 }
 
 export interface LoginPayload {

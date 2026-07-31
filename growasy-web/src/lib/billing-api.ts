@@ -9,16 +9,18 @@ export interface CheckoutResponse {
   cycle: 'monthly' | 'yearly';
 }
 
+export type PurchasableKey = 'STARTER' | 'GROWTH' | 'PROFESSIONAL';
+
 export interface VerifyPayload {
   razorpay_order_id: string;
   razorpay_payment_id: string;
   razorpay_signature: string;
-  plan: 'STARTER' | 'GROWTH';
+  plan: PurchasableKey;
   cycle: 'monthly' | 'yearly';
 }
 
 export const billingApi = {
-  checkout: (plan: 'STARTER' | 'GROWTH', cycle: 'monthly' | 'yearly') =>
+  checkout: (plan: PurchasableKey, cycle: 'monthly' | 'yearly') =>
     apiClient.post<CheckoutResponse>('/billing/checkout', { plan, cycle }),
   verify: (payload: VerifyPayload) =>
     apiClient.post<{ success: boolean; plan: string }>('/billing/verify', payload),

@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsIn, IsString } from 'class-validator';
 import { OrgPlanTier } from '@prisma/client';
 
-const PURCHASABLE = [OrgPlanTier.STARTER, OrgPlanTier.GROWTH];
+const PURCHASABLE = [OrgPlanTier.STARTER, OrgPlanTier.GROWTH, OrgPlanTier.PROFESSIONAL];
 
 export class CheckoutDto {
   @ApiProperty({ enum: PURCHASABLE })

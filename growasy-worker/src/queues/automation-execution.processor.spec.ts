@@ -53,7 +53,9 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
     subscription: { findUnique: vi.fn().mockResolvedValue(null) },
     usageTracking: {
       findUnique: vi.fn().mockResolvedValue(null),
-      upsert: vi.fn().mockResolvedValue({}),
+      // upsert reserves a slot and returns the new count (1 = well under any cap).
+      upsert: vi.fn().mockResolvedValue({ count: 1 }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     notification: {
       findFirst: vi.fn().mockResolvedValue(null),
@@ -123,12 +125,14 @@ describe('processAutomationExecution', () => {
     expect(metaClient.sendDmToComment).not.toHaveBeenCalled();
   });
 
-  it('skips the DM and notifies when the monthly plan limit is reached', async () => {
+  it('skips the DM and refunds the slot when the monthly plan limit is reached', async () => {
     const prisma = makePrisma({
       subscription: subscriptionWithDmLimit(100),
       usageTracking: {
         findUnique: vi.fn().mockResolvedValue({ count: 100 }),
-        upsert: vi.fn().mockResolvedValue({}),
+        // reservation pushes the count over the cap (101 > 100)
+        upsert: vi.fn().mockResolvedValue({ count: 101 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
     });
     const metaClient = makeMetaClient();
@@ -136,7 +140,9 @@ describe('processAutomationExecution', () => {
     await processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient });
 
     expect(metaClient.sendDmToComment).not.toHaveBeenCalled();
-    expect(prisma.usageTracking.upsert).not.toHaveBeenCalled();
+    // reserved a slot, then released it (refund)
+    expect(prisma.usageTracking.upsert).toHaveBeenCalled();
+    expect(prisma.usageTracking.updateMany).toHaveBeenCalled();
     expect(prisma.processedComment.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({ outcome: 'plan_limit_reached' }),
@@ -147,12 +153,50 @@ describe('processAutomationExecution', () => {
     );
   });
 
+  it('sends when the reservation lands exactly on the cap (Nth DM)', async () => {
+    const prisma = makePrisma({
+      subscription: subscriptionWithDmLimit(100),
+      usageTracking: {
+        findUnique: vi.fn().mockResolvedValue({ count: 99 }),
+        upsert: vi.fn().mockResolvedValue({ count: 100 }), // exactly at the cap
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    });
+    const metaClient = makeMetaClient();
+
+    await processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient });
+
+    expect(metaClient.sendDmToComment).toHaveBeenCalled();
+    expect(prisma.usageTracking.updateMany).not.toHaveBeenCalled(); // not refunded
+  });
+
+  it('refunds the reserved slot when the DM send fails', async () => {
+    const prisma = makePrisma({
+      subscription: subscriptionWithDmLimit(100),
+      usageTracking: {
+        findUnique: vi.fn().mockResolvedValue({ count: 5 }),
+        upsert: vi.fn().mockResolvedValue({ count: 6 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    });
+    const metaClient = makeMetaClient({
+      sendDmToComment: vi.fn().mockRejectedValue(new InstagramApiError('timeout')),
+    });
+
+    await expect(
+      processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient }),
+    ).rejects.toThrow('timeout');
+    // reserved, then refunded because the send failed
+    expect(prisma.usageTracking.updateMany).toHaveBeenCalled();
+  });
+
   it('does not enforce the DM limit when the plan is unlimited', async () => {
     const prisma = makePrisma({
       subscription: subscriptionWithDmLimit(-1), // unlimited
       usageTracking: {
         findUnique: vi.fn().mockResolvedValue({ count: 999999 }),
-        upsert: vi.fn().mockResolvedValue({}),
+        upsert: vi.fn().mockResolvedValue({ count: 1000000 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
     });
     const metaClient = makeMetaClient();
