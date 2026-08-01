@@ -5,12 +5,15 @@ import { X } from 'lucide-react';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
 import { ReconnectBanner } from '@/components/layout/ReconnectBanner';
+import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
 
 export function DashboardLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden">
+      <ImpersonationBanner />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="hidden w-64 shrink-0 lg:block">
         <Sidebar />
       </div>
@@ -57,6 +60,7 @@ export function DashboardLayout() {
             <Outlet />
           </main>
         </div>
+      </div>
       </div>
     </div>
   );

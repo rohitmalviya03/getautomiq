@@ -2,6 +2,8 @@ import { Worker, type ConnectionOptions, type Job, type Queue } from 'bullmq';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { logger } from '../logger/logger';
+import { dedupKeyFor } from './dedup-key';
+import { matchAndStartWorkflow, resumeWaitingWorkflow } from './workflow-engine';
 import { matchesKeywords } from '../instagram/keyword-matcher';
 import { upsertContact } from '../contacts/contact';
 import {
@@ -39,6 +41,7 @@ interface DmActionConfig {
 export interface WebhookProcessingDeps {
   prisma: PrismaClient;
   automationQueue: Queue;
+  workflowQueue: Queue;
 }
 
 function parseJson<T>(value: string | null | undefined): T | null {
@@ -91,8 +94,17 @@ export async function processWebhookComment(
   const { prisma, automationQueue } = deps;
   const { commentId, commenterId, commentText, mediaId, instagramBusinessAccountId } = job;
 
-  // 1. Dedup — already seen this comment?
-  const seen = await prisma.processedComment.findUnique({ where: { commentId } });
+  // 0. Defensive guard — a comment job with no commentId is malformed (e.g. a
+  // misrouted message event). Bail before any query keyed on commentId.
+  if (!commentId) {
+    logger.warn({ commenterId, instagramBusinessAccountId }, 'comment job missing commentId — skipping');
+    return;
+  }
+
+  // 1. Dedup — already seen this comment? Keyed on a 'cmt:'-namespaced hash so a
+  // comment id can never collide with a message mid in the shared ledger.
+  const dedupKey = dedupKeyFor('cmt', commentId);
+  const seen = await prisma.processedComment.findUnique({ where: { dedupKey } });
   if (seen) {
     logOutcome({ commentId, commenterId, outcome: 'duplicate' });
     return;
@@ -101,12 +113,18 @@ export async function processWebhookComment(
   // 2. Resolve the connected account that received the comment.
   const account = await prisma.instagramAccount.findFirst({
     where: { instagramBusinessId: instagramBusinessAccountId, deletedAt: null },
-    select: { id: true, organizationId: true, instagramBusinessId: true, status: true },
+    select: {
+      id: true,
+      organizationId: true,
+      instagramBusinessId: true,
+      status: true,
+      organization: { select: { isActive: true } },
+    },
   });
 
   if (!account) {
     logOutcome({ commentId, commenterId, outcome: 'no_account', igId: instagramBusinessAccountId });
-    await recordProcessed(prisma, { commentId, commenterId, mediaId, outcome: 'no_account' });
+    await recordProcessed(prisma, dedupKey, { commentId, commenterId, mediaId, outcome: 'no_account' });
     return;
   }
 
@@ -118,9 +136,23 @@ export async function processWebhookComment(
     mediaId,
   };
 
+  // A super-admin can suspend an organization from the admin console; while
+  // suspended it neither logs in nor runs automations.
+  if (!account.organization.isActive) {
+    logOutcome({ ...logBase, outcome: 'org_suspended' });
+    await recordProcessed(prisma, dedupKey, {
+      commentId,
+      commenterId,
+      mediaId,
+      instagramAccountId: account.id,
+      outcome: 'org_suspended',
+    });
+    return;
+  }
+
   if (account.status !== 'CONNECTED') {
     logOutcome({ ...logBase, outcome: 'needs_reconnect', accountStatus: account.status });
-    await recordProcessed(prisma, {
+    await recordProcessed(prisma, dedupKey, {
       commentId,
       commenterId,
       mediaId,
@@ -134,7 +166,7 @@ export async function processWebhookComment(
   // otherwise loop back through the webhook).
   if (commenterId && commenterId === account.instagramBusinessId) {
     logOutcome({ ...logBase, outcome: 'self_comment' });
-    await recordProcessed(prisma, {
+    await recordProcessed(prisma, dedupKey, {
       commentId,
       commenterId,
       mediaId,
@@ -144,7 +176,31 @@ export async function processWebhookComment(
     return;
   }
 
-  // 3. Find the first active rule whose keyword trigger matches this comment.
+  // 3a. Visual workflows get first refusal. If one matches it CLAIMS the event
+  // (keyword rules below are skipped) so a contact never gets a workflow DM AND a
+  // keyword DM for the same comment.
+  const workflowClaimed = await matchAndStartWorkflow(prisma, deps.workflowQueue, {
+    accountId: account.id,
+    organizationId: account.organizationId,
+    source: 'comment',
+    contactScopedId: commenterId,
+    text: commentText,
+    isStoryReply: false,
+  });
+  if (workflowClaimed) {
+    logOutcome({ ...logBase, outcome: 'workflow_started' });
+    await recordProcessed(prisma, dedupKey, {
+      commentId,
+      commenterId,
+      mediaId,
+      instagramAccountId: account.id,
+      matched: true,
+      outcome: 'workflow_started',
+    });
+    return;
+  }
+
+  // 3b. Otherwise, find the first active keyword rule that matches this comment.
   const rules = await prisma.automationRule.findMany({
     where: { instagramAccountId: account.id, status: 'ACTIVE', deletedAt: null },
     include: { triggers: true },
@@ -155,7 +211,7 @@ export async function processWebhookComment(
 
   if (!matchedRule) {
     logOutcome({ ...logBase, outcome: 'no_match' });
-    await recordProcessed(prisma, {
+    await recordProcessed(prisma, dedupKey, {
       commentId,
       commenterId,
       mediaId,
@@ -167,7 +223,7 @@ export async function processWebhookComment(
   }
 
   // 4. Record the match, then hand off to the execution queue.
-  const created = await recordProcessed(prisma, {
+  const created = await recordProcessed(prisma, dedupKey, {
     commentId,
     commenterId,
     mediaId,
@@ -219,7 +275,10 @@ export async function processWebhookMessage(
   const { prisma, automationQueue } = deps;
   const { messageId, text, senderId, isStoryReply, instagramBusinessAccountId } = job;
 
-  const seen = await prisma.processedComment.findUnique({ where: { commentId: messageId } });
+  // Dedup — keyed on a 'msg:'-namespaced hash (the mid is too long to uniquely
+  // index raw, and namespacing keeps it from colliding with a comment id).
+  const dedupKey = dedupKeyFor('msg', messageId);
+  const seen = await prisma.processedComment.findUnique({ where: { dedupKey } });
   if (seen) {
     logOutcome({ messageId, senderId, outcome: 'duplicate' });
     return;
@@ -227,11 +286,17 @@ export async function processWebhookMessage(
 
   const account = await prisma.instagramAccount.findFirst({
     where: { instagramBusinessId: instagramBusinessAccountId, deletedAt: null },
-    select: { id: true, organizationId: true, instagramBusinessId: true, status: true },
+    select: {
+      id: true,
+      organizationId: true,
+      instagramBusinessId: true,
+      status: true,
+      organization: { select: { isActive: true } },
+    },
   });
   if (!account) {
     logOutcome({ messageId, senderId, outcome: 'no_account', igId: instagramBusinessAccountId });
-    await recordProcessed(prisma, {
+    await recordProcessed(prisma, dedupKey, {
       commentId: messageId,
       commenterId: senderId,
       mediaId: null,
@@ -248,9 +313,22 @@ export async function processWebhookMessage(
     isStoryReply,
   };
 
+  // Suspended organizations (via the admin console) run no automations.
+  if (!account.organization.isActive) {
+    logOutcome({ ...logBase, outcome: 'org_suspended' });
+    await recordProcessed(prisma, dedupKey, {
+      commentId: messageId,
+      commenterId: senderId,
+      mediaId: null,
+      instagramAccountId: account.id,
+      outcome: 'org_suspended',
+    });
+    return;
+  }
+
   if (account.status !== 'CONNECTED') {
     logOutcome({ ...logBase, outcome: 'needs_reconnect', accountStatus: account.status });
-    await recordProcessed(prisma, {
+    await recordProcessed(prisma, dedupKey, {
       commentId: messageId,
       commenterId: senderId,
       mediaId: null,
@@ -263,7 +341,7 @@ export async function processWebhookMessage(
   // Ignore anything the business itself sent (echoes already filtered in the API).
   if (senderId && senderId === account.instagramBusinessId) {
     logOutcome({ ...logBase, outcome: 'self_comment' });
-    await recordProcessed(prisma, {
+    await recordProcessed(prisma, dedupKey, {
       commentId: messageId,
       commenterId: senderId,
       mediaId: null,
@@ -276,7 +354,7 @@ export async function processWebhookMessage(
   // Opt-out: a "STOP"/"unsubscribe" DM unsubscribes the contact so no rule ever
   // DMs them again. Honored before anything else (even lead capture).
   if (!isStoryReply && isOptOut(text)) {
-    const created = await recordProcessed(prisma, {
+    const created = await recordProcessed(prisma, dedupKey, {
       commentId: messageId,
       commenterId: senderId,
       mediaId: null,
@@ -304,13 +382,34 @@ export async function processWebhookMessage(
     return;
   }
 
+  // Workflow resume: if this contact has a workflow paused on a Wait/Collect step,
+  // feed this reply into that run instead of starting anything new. Highest priority
+  // after opt-out so an in-flight flow always consumes the reply it's waiting for.
+  const resumed = await resumeWaitingWorkflow(prisma, deps.workflowQueue, {
+    accountId: account.id,
+    contactScopedId: senderId,
+    text,
+  });
+  if (resumed) {
+    logOutcome({ ...logBase, outcome: 'workflow_resumed' });
+    await recordProcessed(prisma, dedupKey, {
+      commentId: messageId,
+      commenterId: senderId,
+      mediaId: null,
+      instagramAccountId: account.id,
+      matched: true,
+      outcome: 'workflow_resumed',
+    });
+    return;
+  }
+
   // Lead-capture interception: if this contact is mid-email-capture, treat the
   // message as their email answer instead of matching keyword rules. Story
   // replies never carry an email, so they skip the intercept.
   if (!isStoryReply) {
     const capture = await findActiveCapture(prisma, account.id, senderId);
     if (capture) {
-      const created = await recordProcessed(prisma, {
+      const created = await recordProcessed(prisma, dedupKey, {
         commentId: messageId,
         commenterId: senderId,
         mediaId: null,
@@ -328,6 +427,29 @@ export async function processWebhookMessage(
     }
   }
 
+  // Visual workflows get first refusal on a fresh DM / story reply — a match claims
+  // the event so keyword rules below don't also fire (no double DM).
+  const workflowClaimed = await matchAndStartWorkflow(prisma, deps.workflowQueue, {
+    accountId: account.id,
+    organizationId: account.organizationId,
+    source: 'message',
+    contactScopedId: senderId,
+    text,
+    isStoryReply,
+  });
+  if (workflowClaimed) {
+    logOutcome({ ...logBase, outcome: 'workflow_started' });
+    await recordProcessed(prisma, dedupKey, {
+      commentId: messageId,
+      commenterId: senderId,
+      mediaId: null,
+      instagramAccountId: account.id,
+      matched: true,
+      outcome: 'workflow_started',
+    });
+    return;
+  }
+
   const rules = await prisma.automationRule.findMany({
     where: { instagramAccountId: account.id, status: 'ACTIVE', deletedAt: null },
     include: { triggers: true },
@@ -337,7 +459,7 @@ export async function processWebhookMessage(
 
   if (!matchedRule) {
     logOutcome({ ...logBase, outcome: 'no_match' });
-    await recordProcessed(prisma, {
+    await recordProcessed(prisma, dedupKey, {
       commentId: messageId,
       commenterId: senderId,
       mediaId: null,
@@ -348,7 +470,7 @@ export async function processWebhookMessage(
     return;
   }
 
-  const created = await recordProcessed(prisma, {
+  const created = await recordProcessed(prisma, dedupKey, {
     commentId: messageId,
     commenterId: senderId,
     mediaId: null,
@@ -392,7 +514,7 @@ export async function processWebhookMessage(
  * row was already claimed by the caller, so this only mutates state + enqueues.
  */
 async function handleLeadCaptureReply(
-  deps: WebhookProcessingDeps,
+  deps: Pick<WebhookProcessingDeps, 'prisma' | 'automationQueue'>,
   ctx: {
     account: { id: string; organizationId: string };
     capture: PendingCapture;
@@ -495,6 +617,7 @@ function messageRuleMatches(
  */
 async function recordProcessed(
   prisma: PrismaClient,
+  dedupKey: string,
   data: {
     commentId: string;
     commenterId: string;
@@ -509,6 +632,7 @@ async function recordProcessed(
     await prisma.processedComment.create({
       data: {
         commentId: data.commentId,
+        dedupKey,
         commenterId: data.commenterId,
         mediaId: data.mediaId,
         instagramAccountId: data.instagramAccountId ?? null,
@@ -548,8 +672,12 @@ export function createWebhookProcessingWorker(options: {
     async (job: Job) => {
       if (job.name === WEBHOOK_JOB_NAMES.PROCESS_INSTAGRAM_MESSAGE) {
         await processWebhookMessage(job.data as ProcessInstagramMessageJob, deps);
-      } else {
+      } else if (job.name === WEBHOOK_JOB_NAMES.PROCESS_INSTAGRAM_COMMENT) {
         await processWebhookComment(job.data as ProcessInstagramCommentJob, deps);
+      } else {
+        // Never route an unknown/stale job into the comment processor — that path
+        // reads job.commentId and would blow up on `where: { commentId: undefined }`.
+        logger.warn({ jobId: job.id, name: job.name }, 'unknown webhook job — skipping');
       }
     },
     { connection, concurrency },

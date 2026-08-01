@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/toast-context';
 import { instagramApi } from '@/lib/instagram-api';
+import { organizationsApi } from '@/lib/organizations-api';
 import { ApiError } from '@/lib/api-client';
 import type { InstagramAccount, InstagramAccountStatus } from '@/types/api';
 
@@ -95,6 +96,18 @@ export function InstagramAccountsPage() {
     queryFn: instagramApi.listAccounts,
   });
 
+  // Drives the "X of Y accounts" hint and whether the connect button is capped.
+  const usageQuery = useQuery({
+    queryKey: ['organizations', 'usage'],
+    queryFn: organizationsApi.getUsage,
+    staleTime: 60 * 1000,
+  });
+  const usage = usageQuery.data;
+  const accountsLimit = usage?.accountsLimit ?? -1;
+  const accountsUsed = usage?.accountsUsed ?? accounts?.length ?? 0;
+  const atLimit = accountsLimit >= 0 && accountsUsed >= accountsLimit;
+  const hasAccounts = (accounts?.length ?? 0) > 0;
+
   // Mount-time probe so a server without Meta credentials shows the "not
   // configured" callout immediately instead of on the first failed click.
   const oauthProbe = useQuery({
@@ -176,13 +189,15 @@ export function InstagramAccountsPage() {
   const connectButton = (
     <Button
       isLoading={connectMutation.isPending}
-      disabled={notConfigured}
+      disabled={notConfigured || atLimit}
       onClick={() => connectMutation.mutate()}
     >
       <Plug className="h-4 w-4" />
-      Connect Instagram account
+      {hasAccounts ? 'Connect another account' : 'Connect Instagram account'}
     </Button>
   );
+
+  const accountsLimitLabel = accountsLimit < 0 ? 'Unlimited' : accountsLimit;
 
   return (
     <PageTransition>
@@ -194,10 +209,35 @@ export function InstagramAccountsPage() {
             </h1>
             <p className="mt-1 text-slate-500 dark:text-slate-400">
               Business accounts connected to this workspace.
+              {usage ? (
+                <span className="ml-1 font-medium text-slate-600 dark:text-slate-300">
+                  {accountsUsed} of {accountsLimitLabel} used.
+                </span>
+              ) : null}
             </p>
           </div>
           {connectButton}
         </div>
+
+        {atLimit ? (
+          <div
+            role="status"
+            className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950"
+          >
+            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                You’ve reached your plan’s Instagram-account limit ({accountsLimitLabel}).
+              </p>
+              <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                <a href="/billing" className="font-semibold underline">
+                  Upgrade your plan
+                </a>{' '}
+                to connect more accounts.
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         {notConfigured ? (
           <div

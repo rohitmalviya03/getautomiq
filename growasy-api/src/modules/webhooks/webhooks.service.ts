@@ -124,6 +124,9 @@ export class WebhooksService {
     for (const entry of body.entry) {
       // Shape A — Messenger-style entry[].messaging[].
       for (const event of entry.messaging ?? []) {
+        // A message_edit event carries the edited copy of an existing DM — never
+        // treat it as a new inbound message (would double-fire the automation).
+        if (event.message_edit) continue;
         const job = this.toMessageJob(
           event.message,
           event.sender?.id,
@@ -137,6 +140,8 @@ export class WebhooksService {
       for (const change of entry.changes ?? []) {
         if (change.field !== 'messages') continue;
         const v = change.value;
+        // Same as Shape A — ignore edits to already-delivered messages.
+        if (v?.message_edit) continue;
         const job = this.toMessageJob(
           v.message,
           v.sender?.id,

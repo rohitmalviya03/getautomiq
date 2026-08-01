@@ -16,6 +16,10 @@ import {
   createAutomationExecutionQueue,
   createAutomationExecutionWorker,
 } from './queues/automation-execution.processor';
+import {
+  createWorkflowExecutionQueue,
+  createWorkflowExecutionWorker,
+} from './queues/workflow-engine';
 
 async function bootstrap(): Promise<void> {
   const env = validateEnv(process.env);
@@ -49,14 +53,26 @@ async function bootstrap(): Promise<void> {
 
   // Stage-1 consumer enqueues onto this queue; stage-2 consumer drains it.
   const automationQueue = createAutomationExecutionQueue(connection);
+  // Visual workflow engine: stage-1 also starts runs onto this queue.
+  const workflowQueue = createWorkflowExecutionQueue(connection);
 
   const webhookWorker = createWebhookProcessingWorker({
     connection,
-    deps: { prisma, automationQueue },
+    deps: { prisma, automationQueue, workflowQueue },
     concurrency: env.WEBHOOK_PROCESSING_CONCURRENCY,
   });
   webhookWorker.on('ready', () =>
     logger.info({ queue: 'webhook-processing' }, 'webhook-processing worker ready'),
+  );
+
+  const workflowWorker = createWorkflowExecutionWorker({
+    connection,
+    deps: { prisma, decryptor, metaClient },
+    queue: workflowQueue,
+    concurrency: env.AUTOMATION_EXECUTION_CONCURRENCY,
+  });
+  workflowWorker.on('ready', () =>
+    logger.info({ queue: 'workflow-execution' }, 'workflow-execution worker ready'),
   );
 
   const automationWorker = createAutomationExecutionWorker({
@@ -98,8 +114,14 @@ async function bootstrap(): Promise<void> {
     logger.info({ signal }, 'shutting down');
 
     try {
-      await Promise.all([mailWorker.close(), webhookWorker.close(), automationWorker.close()]);
+      await Promise.all([
+        mailWorker.close(),
+        webhookWorker.close(),
+        automationWorker.close(),
+        workflowWorker.close(),
+      ]);
       await automationQueue.close();
+      await workflowQueue.close();
       await stopHealthServer(healthServer);
       await prisma.$disconnect();
       connection.disconnect();

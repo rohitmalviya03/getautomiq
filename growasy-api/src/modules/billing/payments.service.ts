@@ -27,6 +27,54 @@ export class PaymentsService {
     private readonly razorpay: RazorpayService,
   ) {}
 
+  /** Whether online payments are live (keys set) + the publishable key for Checkout. */
+  getConfig(): { enabled: boolean; keyId: string } {
+    return { enabled: this.razorpay.isConfigured(), keyId: this.razorpay.keyId };
+  }
+
+  /**
+   * Cancels at the end of the current paid period — the customer keeps access until
+   * then, and the daily billing cron lapses them to Free afterward. No refund.
+   */
+  async cancelSubscription(organizationId: string) {
+    const sub = await this.prisma.subscription.findUnique({
+      where: { organizationId },
+      include: { plan: true },
+    });
+    if (!sub) throw new NotFoundException('No active subscription to cancel.');
+    if (sub.plan.tier === OrgPlanTier.FREE) {
+      throw new BadRequestException('You are on the Free plan — nothing to cancel.');
+    }
+
+    const updated = await this.prisma.subscription.update({
+      where: { organizationId },
+      data: { cancelAtPeriodEnd: true },
+      select: { cancelAtPeriodEnd: true, currentPeriodEnd: true },
+    });
+
+    try {
+      const org = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { ownerId: true },
+      });
+      if (org?.ownerId) {
+        await this.prisma.notification.create({
+          data: {
+            organizationId,
+            userId: org.ownerId,
+            type: 'BILLING',
+            title: 'Your plan will not renew',
+            body: `You'll keep ${sub.plan.name} until ${updated.currentPeriodEnd.toDateString()}, then move to Free.`,
+            metadata: JSON.stringify({ reason: 'subscription_canceled' }),
+          },
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`cancel notification failed for org ${organizationId}: ${String(e)}`);
+    }
+    return updated;
+  }
+
   /** Creates a Razorpay order for the chosen plan + cycle. */
   async createCheckout(
     organizationId: string,
@@ -113,6 +161,17 @@ export class PaymentsService {
           paymentId,
         );
       }
+      return;
+    }
+
+    // Observability for failed charges — no activation, just a log (the browser
+    // flow already surfaces failures to the user in real time).
+    if (body.event === 'payment.failed') {
+      const p = body.payload?.payment?.entity;
+      this.logger.warn(
+        { paymentId: p?.id, org: p?.notes?.organizationId },
+        'razorpay payment.failed',
+      );
     }
   }
 
@@ -224,6 +283,6 @@ interface WebhookBody {
   event: string;
   payload?: {
     order?: { entity?: { notes?: Record<string, string> } };
-    payment?: { entity?: { id?: string } };
+    payment?: { entity?: { id?: string; notes?: Record<string, string> } };
   };
 }

@@ -27,6 +27,8 @@ export interface InstagramMessagingEvent {
   recipient?: { id: string };
   timestamp?: number;
   message?: InstagramInboundMessage;
+  /** Present when the user edited an existing DM — ignore, not a new message. */
+  message_edit?: unknown;
 }
 
 export interface InstagramWebhookChange {
@@ -52,4 +54,6 @@ export interface InstagramChangeValue {
   recipient?: { id: string };
   timestamp?: string | number;
   message?: InstagramInboundMessage;
+  /** Present when the user edited an existing DM — ignore, not a new message. */
+  message_edit?: unknown;
 }

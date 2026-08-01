@@ -9,7 +9,22 @@ export const QUEUE_NAMES = {
   INSTAGRAM_SYNC: 'instagram-sync',
   AUTOMATION_EXECUTION: 'automation-execution',
   WEBHOOK_PROCESSING: 'webhook-processing',
+  WORKFLOW_EXECUTION: 'workflow-execution',
 } as const;
+
+export const WORKFLOW_JOB_NAMES = {
+  /** Advance a WorkflowRun from its current node until it completes or pauses. */
+  RUN_WORKFLOW: 'run-workflow',
+} as const;
+
+/** One job per step-batch of a workflow run. `resumeText` carries a contact reply
+ *  that resumes a WAITING (wait-for-reply/collect) run; `resume` is a Delay timer
+ *  firing (no reply). Either flag lets a WAITING run advance. */
+export interface RunWorkflowJob {
+  runId: string;
+  resumeText?: string;
+  resume?: boolean;
+}
 
 export const MAIL_JOB_NAMES = {
   SEND_VERIFICATION_EMAIL: 'send-verification-email',

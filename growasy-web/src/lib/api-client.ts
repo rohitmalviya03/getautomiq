@@ -145,6 +145,16 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const response = await rawRequest(path, options);
 
   if (response.status === 401 && !NO_REFRESH_PATHS.has(path)) {
+    // While impersonating, the impersonation access token is memory-only and its
+    // refresh token lives in the response body — NOT the cookie. A normal refresh
+    // here would silently return the ADMIN token (cookie precedence) and leave a
+    // misleading "viewing as customer" banner. So instead we end impersonation by
+    // reloading: the intact admin cookie re-bootstraps the admin session.
+    if (useAuthStore.getState().impersonation) {
+      window.location.assign('/admin/customers');
+      return parseEnvelope<T>(response);
+    }
+
     const newToken = await refreshAccessToken();
     if (newToken) {
       const retryResponse = await rawRequest(path, { ...options, skipAuthRetry: true });
@@ -168,6 +178,8 @@ export const apiClient = {
     apiRequest<T>(path, { ...options, method: 'POST', body }),
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     apiRequest<T>(path, { ...options, method: 'PATCH', body }),
+  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    apiRequest<T>(path, { ...options, method: 'PUT', body }),
   delete: <T>(path: string, options?: RequestOptions) =>
     apiRequest<T>(path, { ...options, method: 'DELETE' }),
 };

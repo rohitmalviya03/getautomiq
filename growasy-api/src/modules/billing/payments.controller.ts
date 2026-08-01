@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
@@ -23,6 +24,21 @@ import { PERMISSIONS } from '../../common/constants/permissions.constant';
 @Controller({ path: 'billing', version: '1' })
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
+
+  /** Whether online payments are live + the publishable key (so the UI can gate the pay button). */
+  @Get('config')
+  config() {
+    return this.payments.getConfig();
+  }
+
+  /** Cancels the current paid plan at period end (keeps access until then). */
+  @Post('cancel')
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader({ name: 'x-organization-id', required: true })
+  @RequirePermissions(PERMISSIONS.BILLING_MANAGE)
+  cancel(@CurrentOrgId() organizationId: string) {
+    return this.payments.cancelSubscription(organizationId);
+  }
 
   /** Creates a Razorpay order the browser opens in Checkout. */
   @Post('checkout')

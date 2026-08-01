@@ -18,6 +18,8 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { LinksModule } from './modules/links/links.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { WorkflowsModule } from './modules/workflows/workflows.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './modules/health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -58,6 +60,8 @@ import { FeatureGuard } from './common/guards/feature.guard';
     AnalyticsModule,
     LinksModule,
     NotificationsModule,
+    WorkflowsModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

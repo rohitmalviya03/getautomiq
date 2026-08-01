@@ -26,10 +26,10 @@ export class AnalyticsController {
     return this.analyticsService.getOverview(organizationId, rangeDays);
   }
 
-  /** Per-post / per-reel automation performance. Starter (₹149) and above. */
+  /** Per-post / per-reel automation performance. Growth (₹499) and above. */
   @Get('posts')
   @RequirePermissions(PERMISSIONS.ANALYTICS_READ)
-  @RequireFeature(PLAN_FEATURES.ANALYTICS)
+  @RequireFeature(PLAN_FEATURES.POST_ANALYTICS)
   @ApiQuery({ name: 'days', required: false, description: 'Lookback window (default 30, max 90)' })
   posts(@CurrentOrgId() organizationId: string, @Query('days') days?: string) {
     const parsed = Number(days);

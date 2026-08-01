@@ -18,6 +18,9 @@ build/
 !**/.env.example
 !**/.env.test
 
+# ---- Debug-only script that prints DECRYPTED tokens — never ship to prod ----
+growasy-api/src/common/utils/test.ts
+
 # ---- Logs ----
 *.log
 npm-debug.log*

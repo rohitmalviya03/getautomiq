@@ -10,6 +10,7 @@ const PUBLIC_USER_FIELDS = {
   avatarUrl: true,
   status: true,
   isEmailVerified: true,
+  isSuperAdmin: true, // drives the admin-panel nav/route gating in growasy-web
   createdAt: true,
 } as const;
 

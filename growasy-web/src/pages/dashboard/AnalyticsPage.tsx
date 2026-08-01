@@ -314,7 +314,7 @@ function PostAnalyticsSection({ days }: { days: number }) {
     queryFn: organizationsApi.getUsage,
   });
   const rank = usageQuery.data ? planRank(usageQuery.data.planName) : Infinity;
-  const canAccess = rank >= PLAN_RANK.STARTER;
+  const canAccess = rank >= PLAN_RANK.GROWTH;
 
   const postsQuery = useQuery({
     queryKey: ['analytics', 'posts', days],
@@ -345,7 +345,7 @@ function PostAnalyticsSection({ days }: { days: number }) {
           </p>
         </div>
         <span className="shrink-0 rounded-md bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
-          Starter+
+          Growth+
         </span>
       </CardHeader>
       <CardContent>
@@ -357,7 +357,7 @@ function PostAnalyticsSection({ days }: { days: number }) {
               <Lock className="h-5 w-5" />
             </span>
             <p className="max-w-xs text-sm text-slate-600 dark:text-slate-300">
-              Post-wise analytics is available on <strong>Starter</strong> and above.
+              Post-wise analytics is available on <strong>Growth</strong> and above.
             </p>
             <Link to="/billing">
               <Button size="sm">Upgrade plan</Button>

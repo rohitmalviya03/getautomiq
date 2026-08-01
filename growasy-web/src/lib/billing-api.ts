@@ -19,9 +19,17 @@ export interface VerifyPayload {
   cycle: 'monthly' | 'yearly';
 }
 
+export interface BillingConfig {
+  enabled: boolean;
+  keyId: string;
+}
+
 export const billingApi = {
+  config: () => apiClient.get<BillingConfig>('/billing/config'),
   checkout: (plan: PurchasableKey, cycle: 'monthly' | 'yearly') =>
     apiClient.post<CheckoutResponse>('/billing/checkout', { plan, cycle }),
   verify: (payload: VerifyPayload) =>
     apiClient.post<{ success: boolean; plan: string }>('/billing/verify', payload),
+  cancel: () =>
+    apiClient.post<{ cancelAtPeriodEnd: boolean; currentPeriodEnd: string }>('/billing/cancel'),
 };

@@ -458,6 +458,26 @@ export class AuthService {
   }
 
   // ---------------------------------------------------------------------
+  // Impersonation (super-admin only — authorization enforced by the caller)
+  // ---------------------------------------------------------------------
+
+  /**
+   * Mints a login session for `targetUser` so a super-admin can view the app as a
+   * customer. BOTH tokens are returned in the body (the controller must NOT set the
+   * refresh cookie) — that keeps the admin's own httpOnly refresh cookie intact, so
+   * "Exit impersonation" is a pure client-side drop with no re-login. No privilege is
+   * fabricated: the session belongs to the target user, who genuinely owns that org.
+   */
+  async issueImpersonationSession(targetUser: User, meta: RequestMeta) {
+    const session = await this.issueSession(targetUser, meta, false);
+    return {
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      expiresIn: this.config.jwt.accessExpiresIn,
+    };
+  }
+
+  // ---------------------------------------------------------------------
 
   private toUserView(user: User, organizationId: string): AuthUserView {
     return {

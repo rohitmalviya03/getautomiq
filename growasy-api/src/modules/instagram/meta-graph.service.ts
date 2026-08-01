@@ -24,7 +24,17 @@ export interface LongLivedToken {
 }
 
 export interface InstagramProfile {
+  /**
+   * The Instagram account id that webhooks deliver as `entry.id` (the `user_id`
+   * field, e.g. 17841…). This is what we store as `instagramBusinessId` and what
+   * the worker matches inbound comment/message events against.
+   */
   id: string;
+  /**
+   * The `/me` `id` field — a *different*, app-scoped number. Kept for reference /
+   * debugging only; never used for webhook matching.
+   */
+  appScopedId: string | null;
   username: string;
   name: string | null;
   profilePictureUrl: string | null;
@@ -95,8 +105,17 @@ export class MetaGraphService {
     }
   }
 
-  /** Step 1: the Instagram authorization URL the user is redirected to. */
-  buildAuthorizationUrl(state: string): string {
+  /**
+   * Step 1: the Instagram authorization URL the user is redirected to.
+   *
+   * `forceReauth` maps to Instagram's `force_reauth=true`, which forces the login /
+   * account-chooser screen instead of silently re-using whichever account the
+   * browser is already logged into. Without it a user who already has one account
+   * connected can never add a *second* one — Instagram just returns the same
+   * account and we re-upsert the existing row. So we set it when connecting a NEW
+   * account, and leave it off for reconnects (which must stay on the same account).
+   */
+  buildAuthorizationUrl(state: string, forceReauth = false): string {
     this.assertConfigured();
     const params = new URLSearchParams({
       // MUST be the Instagram App ID (not the Facebook App ID) or Instagram
@@ -108,6 +127,9 @@ export class MetaGraphService {
       // Optional per the OAuth spec but supported by Instagram — we use it for CSRF.
       state,
     });
+    if (forceReauth) {
+      params.set('force_reauth', 'true');
+    }
     return `${IG_AUTHORIZE_URL}?${params.toString()}`;
   }
 
@@ -152,11 +174,14 @@ export class MetaGraphService {
   /** Step 4: fetch the connected account's profile with the long-lived token. */
   async getProfile(accessToken: string): Promise<InstagramProfile> {
     const params = new URLSearchParams({
-      fields: 'id,username,name,profile_picture_url,followers_count,media_count',
+      // `user_id` is the IG account id that webhooks send as entry.id; `id` is a
+      // *different* app-scoped number. Request both — we key the account on user_id.
+      fields: 'id,user_id,username,name,profile_picture_url,followers_count,media_count',
       access_token: accessToken,
     });
     const body = await this.httpJson<{
       id: string;
+      user_id?: string | number;
       username: string;
       name?: string;
       profile_picture_url?: string;
@@ -164,8 +189,12 @@ export class MetaGraphService {
       media_count?: number;
     }>(`${IG_GRAPH_BASE}/me?${params}`, { method: 'GET' });
 
+    // Prefer user_id (matches webhook entry.id). Fall back to id only if the field
+    // is unexpectedly absent, so a connect never fails outright.
+    const webhookId = body.user_id != null ? String(body.user_id) : body.id;
     return {
-      id: body.id,
+      id: webhookId,
+      appScopedId: body.id ? String(body.id) : null,
       username: body.username,
       name: body.name ?? null,
       profilePictureUrl: body.profile_picture_url ?? null,

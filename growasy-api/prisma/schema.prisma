@@ -107,6 +107,34 @@ enum ExecutionStatus {
   IN_PROGRESS
 }
 
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum WorkflowNodeType {
+  TRIGGER
+  SEND_MESSAGE
+  WAIT_REPLY
+  CONDITION
+  COLLECT_INPUT
+  DELAY
+  ACTION
+  HANDOFF
+  END
+}
+
+enum WorkflowRunStatus {
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+  HANDOFF
+  CANCELED
+}
+
 enum ConversationStatus {
   OPEN
   PENDING
@@ -297,6 +325,7 @@ model Organization {
   auditLogs           AuditLog[]
   supportTickets      SupportTicket[]
   trackedLinks        TrackedLink[]
+  workflows           Workflow[]
 
   @@index([ownerId])
   @@index([deletedAt])
@@ -422,7 +451,8 @@ model PasswordResetToken {
 model InstagramAccount {
   id                   String                 @id @default(uuid()) @db.Char(36)
   organizationId       String                 @db.Char(36)
-  instagramBusinessId  String                 @unique @db.VarChar(64) // IG user id (Instagram Login "user_id")
+  instagramBusinessId  String                 @unique @db.VarChar(64) // IG account id webhooks send as entry.id (the `user_id` field) — worker matches on this
+  appScopedId          String?                @db.VarChar(64) // the `/me` `id` field — app-scoped, informational only
   facebookPageId       String?                @db.VarChar(64) // null under Instagram Login flow; only set by the legacy FB-Page flow
   username             String                 @db.VarChar(255)
   name                 String?                @db.VarChar(255)
@@ -445,6 +475,7 @@ model InstagramAccount {
   messages        Message[]
   webhookEvents   WebhookEvent[]
   trackedLinks    TrackedLink[]
+  workflows       Workflow[]
 
   @@index([organizationId])
   @@index([status])
@@ -551,6 +582,109 @@ model AutomationExecutionLog {
   @@index([status])
 }
 
+// ============================================================================
+// VISUAL WORKFLOW ENGINE
+// Node/edge graph authored in growasy-web, executed by growasy-worker. Runs
+// alongside (never inside) the keyword AutomationRule engine.
+// ============================================================================
+
+model Workflow {
+  id                 String         @id @default(uuid()) @db.Char(36)
+  organizationId     String         @db.Char(36)
+  instagramAccountId String         @db.Char(36)
+  name               String         @db.VarChar(255)
+  description        String?        @db.VarChar(1000)
+  status             WorkflowStatus @default(DRAFT)
+  priority           Int            @default(0) // higher wins when several workflows match one event
+  version            Int            @default(1)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  nodes            WorkflowNode[]
+  edges            WorkflowEdge[]
+  runs             WorkflowRun[]
+
+  @@index([organizationId])
+  @@index([instagramAccountId])
+  @@index([status])
+}
+
+model WorkflowNode {
+  id         String           @id @default(uuid()) @db.Char(36) // client-generated so edges + in-flight runs stay stable across saves
+  workflowId String           @db.Char(36)
+  type       WorkflowNodeType
+  config     String           @db.LongText // JSON-encoded, node-type-specific
+  positionX  Int              @default(0)
+  positionY  Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+}
+
+model WorkflowEdge {
+  id           String   @id @default(uuid()) @db.Char(36)
+  workflowId   String   @db.Char(36)
+  sourceNodeId String   @db.Char(36)
+  targetNodeId String   @db.Char(36)
+  sourceHandle String?  @db.VarChar(64) // which output a branch node leaves from (condition path / quick-reply)
+  label        String?  @db.VarChar(255)
+  config       String?  @db.LongText // JSON — branch match config (e.g. keywords for a Condition path)
+  createdAt    DateTime @default(now())
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([sourceNodeId])
+}
+
+/// One per-contact execution of a workflow. `currentNodeId` + `status` are the
+/// resumable cursor: a WAITING run is picked up by the message processor when the
+/// contact replies (generalizing PendingLeadCapture), or by a delayed BullMQ job.
+model WorkflowRun {
+  id                 String            @id @default(uuid()) @db.Char(36)
+  workflowId         String            @db.Char(36)
+  organizationId     String            @db.Char(36)
+  instagramAccountId String            @db.Char(36)
+  contactScopedId    String            @db.VarChar(64) // contact IGSID the flow is running for
+  contactId          String?           @db.Char(36)
+  status             WorkflowRunStatus @default(RUNNING)
+  currentNodeId      String?           @db.Char(36)
+  variables          String?           @db.LongText // JSON — vars collected along the run
+  waitKind           String?           @db.VarChar(32) // reply | delay | handoff
+  waitExpiresAt      DateTime?
+  lastError          String?           @db.VarChar(1000)
+  startedAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  completedAt        DateTime?
+
+  workflow Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  steps    WorkflowRunStep[]
+
+  @@index([workflowId])
+  @@index([instagramAccountId, contactScopedId, status])
+  @@index([status])
+}
+
+model WorkflowRunStep {
+  id        String   @id @default(uuid()) @db.Char(36)
+  runId     String   @db.Char(36)
+  nodeId    String?  @db.Char(36)
+  nodeType  String   @db.VarChar(32)
+  status    String   @db.VarChar(32) // ok | failed | skipped | waiting
+  detail    String?  @db.LongText
+  createdAt DateTime @default(now())
+
+  run WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
 /// Dedup + rate-limit ledger for comment→DM automation. One row per Instagram
 /// comment the webhook pipeline has seen. growasy-worker owns the read/write of
 /// this table (growasy-api only produces webhook jobs); the `commentId` unique
@@ -558,7 +692,11 @@ model AutomationExecutionLog {
 /// backs the per-user 24h DM rate limit.
 model ProcessedComment {
   id                 String   @id @default(uuid()) @db.Char(36)
-  commentId          String   @unique @db.VarChar(64)
+  // Holds a comment id OR a message `mid`. Message mids run 200+ chars, so this is
+  // wide and NOT uniquely indexed (MySQL 5.6 utf8mb4 caps a unique index at 191
+  // chars). Idempotency is enforced on `dedupKey` (a fixed-length hash) instead.
+  commentId          String   @db.VarChar(512)
+  dedupKey           String   @unique @db.Char(64) // sha256("cmt:<id>" | "msg:<mid>") — namespaced idempotency key
   commenterId        String   @db.VarChar(64)
   mediaId            String?  @db.VarChar(64)
   instagramAccountId String?  @db.Char(36)

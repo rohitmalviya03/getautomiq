@@ -37,6 +37,8 @@ export interface AuthUserView {
   isEmailVerified: boolean;
   status: string;
   organizationId: string;
+  /** Only populated after GET /users/me (login/register omit it). Gates the admin panel. */
+  isSuperAdmin?: boolean;
 }
 
 /** Normalized organization shape used throughout growasy-web. */
@@ -75,6 +77,7 @@ export interface UserPublicProfile {
   avatarUrl: string | null;
   status: string;
   isEmailVerified: boolean;
+  isSuperAdmin: boolean;
   createdAt: string;
 }
 

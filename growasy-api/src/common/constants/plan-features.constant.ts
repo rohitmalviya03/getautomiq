@@ -7,6 +7,10 @@ import { OrgPlanTier } from '@prisma/client';
  */
 export const PLAN_FEATURES = {
   ANALYTICS: 'analytics',
+  /** Per-post / per-reel performance breakdown (Growth and above). */
+  POST_ANALYTICS: 'post_analytics',
+  /** Visual workflow builder + engine (Growth and above). */
+  WORKFLOWS: 'workflows',
   WHITE_LABEL: 'white_label',
   /** Owning more than one workspace (the agency/multi-brand use case). */
   MULTIPLE_WORKSPACES: 'multiple_workspaces',
@@ -20,6 +24,19 @@ export type PlanFeatureKey = (typeof PLAN_FEATURES)[keyof typeof PLAN_FEATURES];
 export const FEATURE_TIER_MATRIX: Record<PlanFeatureKey, OrgPlanTier[]> = {
   [PLAN_FEATURES.ANALYTICS]: [
     OrgPlanTier.STARTER,
+    OrgPlanTier.GROWTH,
+    OrgPlanTier.PROFESSIONAL,
+    OrgPlanTier.AGENCY,
+    OrgPlanTier.ENTERPRISE,
+  ],
+  // Post-wise analytics + the visual workflow builder are Growth and above only.
+  [PLAN_FEATURES.POST_ANALYTICS]: [
+    OrgPlanTier.GROWTH,
+    OrgPlanTier.PROFESSIONAL,
+    OrgPlanTier.AGENCY,
+    OrgPlanTier.ENTERPRISE,
+  ],
+  [PLAN_FEATURES.WORKFLOWS]: [
     OrgPlanTier.GROWTH,
     OrgPlanTier.PROFESSIONAL,
     OrgPlanTier.AGENCY,

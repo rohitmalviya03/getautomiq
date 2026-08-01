@@ -115,7 +115,13 @@ describe('InstagramAccountsService', () => {
       const result = service.getAuthorizationUrl(ORG, USER);
       expect(result.url).toContain('instagram.com/oauth/authorize');
       expect(result.state).toEqual(expect.any(String));
-      expect(metaGraph.buildAuthorizationUrl).toHaveBeenCalledWith(result.state);
+      // New connect forces the account chooser so a second account can be added.
+      expect(metaGraph.buildAuthorizationUrl).toHaveBeenCalledWith(result.state, true);
+    });
+
+    it('does NOT force re-auth when reconnecting a specific account', () => {
+      const result = service.getAuthorizationUrl(ORG, USER, 'acc-1');
+      expect(metaGraph.buildAuthorizationUrl).toHaveBeenCalledWith(result.state, false);
     });
   });
 

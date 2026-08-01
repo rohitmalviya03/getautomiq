@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { setUnauthorizedHandler } from '@/lib/api-client';
 import { useBootstrapAuth } from '@/hooks/use-bootstrap-auth';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { SuperAdminRoute } from '@/components/auth/SuperAdminRoute';
 import { PublicOnlyRoute } from '@/components/auth/PublicOnlyRoute';
 import { FullPageSpinner } from '@/components/ui/FullPageSpinner';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -24,6 +25,14 @@ import { ContactsPage } from '@/pages/dashboard/ContactsPage';
 import { AnalyticsPage } from '@/pages/dashboard/AnalyticsPage';
 import { LinksPage } from '@/pages/dashboard/LinksPage';
 import { BillingPage } from '@/pages/dashboard/BillingPage';
+import { WorkflowsPage } from '@/pages/dashboard/WorkflowsPage';
+import { WorkflowBuilderPage } from '@/pages/dashboard/WorkflowBuilderPage';
+import { AdminLayout } from '@/pages/admin/AdminLayout';
+import { AdminOverviewPage } from '@/pages/admin/AdminOverviewPage';
+import { AdminCustomersPage } from '@/pages/admin/AdminCustomersPage';
+import { AdminCustomerDetailPage } from '@/pages/admin/AdminCustomerDetailPage';
+import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
+import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
 import { ToolsHubPage } from '@/pages/tools/ToolsHubPage';
 import { ToolDetailPage } from '@/pages/tools/ToolDetailPage';
 import { PrivacyPage } from '@/pages/legal/PrivacyPage';
@@ -103,6 +112,8 @@ export function App() {
           <Route path="/dashboard" element={<DashboardHome />} />
           <Route path="/instagram/accounts" element={<InstagramAccountsPage />} />
           <Route path="/automations" element={<AutomationsPage />} />
+          <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route path="/workflows/:id" element={<WorkflowBuilderPage />} />
           <Route path="/content" element={<ContentPage />} />
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
@@ -113,6 +124,17 @@ export function App() {
           <Route path="/settings" element={<ProfilePage />} />
           <Route path="/sessions" element={<SessionsPage />} />
           <Route path="/organization" element={<OrganizationPage />} />
+        </Route>
+      </Route>
+
+      {/* Platform-owner back office — gated to User.isSuperAdmin (API-enforced too). */}
+      <Route element={<SuperAdminRoute />}>
+        <Route element={<AdminLayout />}>
+          <Route path="/admin" element={<AdminOverviewPage />} />
+          <Route path="/admin/customers" element={<AdminCustomersPage />} />
+          <Route path="/admin/customers/:id" element={<AdminCustomerDetailPage />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/audit" element={<AdminAuditPage />} />
         </Route>
       </Route>
 

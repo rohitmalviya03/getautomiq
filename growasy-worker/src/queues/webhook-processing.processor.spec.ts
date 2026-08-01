@@ -20,6 +20,7 @@ const CONNECTED_ACCOUNT = {
   organizationId: 'org-1',
   instagramBusinessId: 'ig-biz-1',
   status: 'CONNECTED',
+  organization: { isActive: true },
 };
 
 function priceRule() {
@@ -55,6 +56,14 @@ function makePrisma(overrides: Record<string, unknown> = {}): PrismaClient {
       findUnique: vi.fn().mockResolvedValue(null),
       update: vi.fn().mockResolvedValue({}),
     },
+    // No active workflows by default — keyword-automation tests exercise the
+    // fall-through path after workflows decline the event.
+    workflow: { findMany: vi.fn().mockResolvedValue([]) },
+    workflowRun: {
+      create: vi.fn().mockResolvedValue({ id: 'wfr-1' }),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+    },
     ...overrides,
   } as unknown as PrismaClient;
 }
@@ -63,12 +72,17 @@ function makeQueue(): Queue {
   return { add: vi.fn().mockResolvedValue(undefined) } as unknown as Queue;
 }
 
+/** Deps for the processors, including the workflow queue added by the engine. */
+function deps(prisma: PrismaClient, automationQueue: Queue) {
+  return { prisma, automationQueue, workflowQueue: makeQueue() };
+}
+
 describe('processWebhookComment', () => {
   it('enqueues an automation-execution job when a rule matches', async () => {
     const prisma = makePrisma();
     const automationQueue = makeQueue();
 
-    await processWebhookComment(BASE_JOB, { prisma, automationQueue });
+    await processWebhookComment(BASE_JOB, deps(prisma, automationQueue));
 
     expect(automationQueue.add).toHaveBeenCalledWith(
       'execute-automation',
@@ -109,7 +123,7 @@ describe('processWebhookComment', () => {
         instagramBusinessAccountId: 'ig-biz-1',
         rawEventTimestamp: 1,
       },
-      { prisma, automationQueue },
+      deps(prisma, automationQueue),
     );
 
     expect(automationQueue.add).toHaveBeenCalledWith(
@@ -133,7 +147,7 @@ describe('processWebhookComment', () => {
     });
     const automationQueue = makeQueue();
 
-    await processWebhookComment(BASE_JOB, { prisma, automationQueue });
+    await processWebhookComment(BASE_JOB, deps(prisma, automationQueue));
 
     expect(automationQueue.add).not.toHaveBeenCalled();
     expect(prisma.processedComment.create as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
@@ -145,7 +159,7 @@ describe('processWebhookComment', () => {
     });
     const automationQueue = makeQueue();
 
-    await processWebhookComment(BASE_JOB, { prisma, automationQueue });
+    await processWebhookComment(BASE_JOB, deps(prisma, automationQueue));
 
     expect(automationQueue.add).not.toHaveBeenCalled();
     expect(prisma.processedComment.create).toHaveBeenCalledWith(
@@ -163,11 +177,27 @@ describe('processWebhookComment', () => {
     });
     const automationQueue = makeQueue();
 
-    await processWebhookComment(BASE_JOB, { prisma, automationQueue });
+    await processWebhookComment(BASE_JOB, deps(prisma, automationQueue));
 
     expect(automationQueue.add).not.toHaveBeenCalled();
     expect(prisma.processedComment.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ outcome: 'needs_reconnect' }) }),
+    );
+  });
+
+  it('skips events for a suspended organization', async () => {
+    const prisma = makePrisma({
+      instagramAccount: {
+        findFirst: vi.fn().mockResolvedValue({ ...CONNECTED_ACCOUNT, organization: { isActive: false } }),
+      },
+    });
+    const automationQueue = makeQueue();
+
+    await processWebhookComment(BASE_JOB, deps(prisma, automationQueue));
+
+    expect(automationQueue.add).not.toHaveBeenCalled();
+    expect(prisma.processedComment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ outcome: 'org_suspended' }) }),
     );
   });
 
@@ -177,7 +207,7 @@ describe('processWebhookComment', () => {
 
     await processWebhookComment(
       { ...BASE_JOB, commenterId: 'ig-biz-1' },
-      { prisma, automationQueue },
+      deps(prisma, automationQueue),
     );
 
     expect(automationQueue.add).not.toHaveBeenCalled();
@@ -220,7 +250,7 @@ describe('processWebhookComment', () => {
         instagramBusinessAccountId: 'ig-biz-1',
         rawEventTimestamp: 1,
       },
-      { prisma, automationQueue },
+      deps(prisma, automationQueue),
     );
 
     // Email saved (lowercased) to the contact.
@@ -275,7 +305,7 @@ describe('processWebhookComment', () => {
         instagramBusinessAccountId: 'ig-biz-1',
         rawEventTimestamp: 1,
       },
-      { prisma, automationQueue },
+      deps(prisma, automationQueue),
     );
 
     expect(prisma.pendingLeadCapture.update as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
@@ -313,7 +343,7 @@ describe('processWebhookComment', () => {
         instagramBusinessAccountId: 'ig-biz-1',
         rawEventTimestamp: 1,
       },
-      { prisma, automationQueue },
+      deps(prisma, automationQueue),
     );
 
     // Falls through to normal matching → no lead reply enqueued.
@@ -340,7 +370,7 @@ describe('processWebhookComment', () => {
         instagramBusinessAccountId: 'ig-biz-1',
         rawEventTimestamp: 1,
       },
-      { prisma, automationQueue },
+      deps(prisma, automationQueue),
     );
 
     expect(prisma.contact.upsert as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
@@ -367,7 +397,7 @@ describe('processWebhookComment', () => {
     });
     const automationQueue = makeQueue();
 
-    await processWebhookComment(BASE_JOB, { prisma, automationQueue });
+    await processWebhookComment(BASE_JOB, deps(prisma, automationQueue));
 
     expect(automationQueue.add).not.toHaveBeenCalled();
   });

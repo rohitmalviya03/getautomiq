@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Sparkles } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Check, Sparkles, Info } from 'lucide-react';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/toast-context';
 import { useAuthStore } from '@/stores/auth-store';
 import { organizationsApi, type OrgUsage } from '@/lib/organizations-api';
@@ -53,6 +54,27 @@ export function BillingPage() {
   });
   const usage = usageQuery.data;
   const currentPlan = usage?.planName ?? null;
+  const isPaidPlan = currentPlan != null && currentPlan !== 'Free';
+
+  const configQuery = useQuery({
+    queryKey: ['billing', 'config'],
+    queryFn: billingApi.config,
+    staleTime: 5 * 60 * 1000,
+  });
+  const paymentsEnabled = configQuery.data?.enabled ?? false;
+  const paymentsUnavailable = configQuery.isSuccess && !paymentsEnabled;
+
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const cancelMutation = useMutation({
+    mutationFn: () => billingApi.cancel(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['organizations', 'usage'] });
+      setCancelOpen(false);
+      showToast({ variant: 'success', title: 'Your plan won’t renew — you keep access until period end.' });
+    },
+    onError: (e) =>
+      showToast({ variant: 'error', title: 'Could not cancel', description: e instanceof ApiError ? e.message : undefined }),
+  });
 
   const startCheckout = async (plan: Plan) => {
     const key = plan.key as 'STARTER' | 'GROWTH' | 'PROFESSIONAL';
@@ -109,6 +131,14 @@ export function BillingPage() {
   const onSelect = (plan: Plan) => {
     if (plan.tag === currentPlan) return;
     if (plan.key === 'STARTER' || plan.key === 'GROWTH' || plan.key === 'PROFESSIONAL') {
+      if (!paymentsEnabled) {
+        showToast({
+          variant: 'info',
+          title: 'Online payments aren’t enabled yet',
+          description: 'Card checkout is being set up — please contact support to upgrade in the meantime.',
+        });
+        return;
+      }
       void startCheckout(plan);
     } else {
       showToast({
@@ -135,6 +165,16 @@ export function BillingPage() {
           </p>
         </div>
 
+        {paymentsUnavailable ? (
+          <div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-sky-950">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" />
+            <p className="text-sm text-sky-800 dark:text-sky-200">
+              Online card payments aren’t enabled on this server yet. The plans below are ready — set the
+              Razorpay keys to start collecting payments, or contact support to upgrade manually.
+            </p>
+          </div>
+        ) : null}
+
         {/* Current usage */}
         <Card>
           <CardContent className="space-y-5 py-5">
@@ -142,11 +182,18 @@ export function BillingPage() {
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 This month’s usage
               </h2>
-              {currentPlan ? (
-                <span className="brand-gradient rounded-full px-3 py-1 text-xs font-semibold text-white shadow-glow">
-                  {currentPlan}
-                </span>
-              ) : null}
+              <div className="flex items-center gap-2">
+                {isPaidPlan ? (
+                  <Button variant="ghost" size="sm" onClick={() => setCancelOpen(true)}>
+                    Cancel plan
+                  </Button>
+                ) : null}
+                {currentPlan ? (
+                  <span className="brand-gradient rounded-full px-3 py-1 text-xs font-semibold text-white shadow-glow">
+                    {currentPlan}
+                  </span>
+                ) : null}
+              </div>
             </div>
             {usageQuery.isLoading || !usage ? (
               <div className="space-y-4">
@@ -308,6 +355,18 @@ export function BillingPage() {
           Prices in INR. No contact-based billing, no hidden charges.
         </p>
       </div>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        title="Cancel your plan?"
+        description="You'll keep your current plan until the end of the paid period, then move to Free. No refund is issued for the remaining time."
+        confirmLabel="Cancel at period end"
+        cancelLabel="Keep my plan"
+        variant="danger"
+        isLoading={cancelMutation.isPending}
+        onConfirm={() => cancelMutation.mutate()}
+        onCancel={() => setCancelOpen(false)}
+      />
     </PageTransition>
   );
 }

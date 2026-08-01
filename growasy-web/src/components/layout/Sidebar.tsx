@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Instagram,
   Bot,
+  Workflow,
   Users,
   BarChart3,
   Link2,
@@ -12,15 +13,18 @@ import {
   UserCog,
   MonitorSmartphone,
   Building2,
+  ShieldCheck,
 } from 'lucide-react';
 import { organizationsApi } from '@/lib/organizations-api';
 import { planRank, PLAN_RANK } from '@/lib/plans';
+import { useAuthStore } from '@/stores/auth-store';
 
 /** `minRank` gates an item to a plan tier (omitted = every plan, incl. Free). */
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/instagram/accounts', label: 'Instagram', icon: Instagram, end: false },
   { to: '/automations', label: 'Automations', icon: Bot, end: false },
+  { to: '/workflows', label: 'Workflows', icon: Workflow, end: false, minRank: PLAN_RANK.GROWTH },
   { to: '/content', label: 'Content', icon: Images, end: false },
   { to: '/analytics', label: 'Analytics', icon: BarChart3, end: false },
   { to: '/contacts', label: 'Contacts', icon: Users, end: false, minRank: PLAN_RANK.STARTER },
@@ -39,6 +43,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     queryFn: organizationsApi.getUsage,
     staleTime: 5 * 60 * 1000,
   });
+  const isSuperAdmin = useAuthStore((s) => s.user?.isSuperAdmin ?? false);
   const rank = usageQuery.data ? planRank(usageQuery.data.planName) : Infinity;
   const items = NAV_ITEMS.filter((item) => (item.minRank ?? 0) <= rank);
 
@@ -75,6 +80,23 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             {label}
           </NavLink>
         ))}
+
+        {isSuperAdmin ? (
+          <NavLink
+            to="/admin"
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `focus-ring group mt-2 flex items-center gap-3 rounded-xl border border-amber-300/60 px-3 py-2.5 text-sm font-semibold transition-all duration-200 dark:border-amber-400/30 ${
+                isActive
+                  ? 'bg-amber-500 text-white shadow-glow'
+                  : 'text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-500/10'
+              }`
+            }
+          >
+            <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Admin console
+          </NavLink>
+        ) : null}
       </nav>
 
       <div className="px-4 pb-4">

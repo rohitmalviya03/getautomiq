@@ -10,6 +10,7 @@ import {
   incrementDmUsage,
   notifyMonthlyDmLimit,
 } from '../billing/usage';
+import { dedupKeyFor } from './dedup-key';
 import { openLeadCapture } from './lead-capture';
 import {
   AUTOMATION_JOB_NAMES,
@@ -69,12 +70,14 @@ function resolveRateLimit(rule: RuleWithGraph): number {
 async function markProcessed(
   prisma: PrismaClient,
   commentId: string,
+  dedupKey: string,
   data: { matched?: boolean; dmSent?: boolean; outcome: string; errorMessage?: string | null },
 ): Promise<void> {
   // The stage-1 row usually exists already; upsert keeps this safe even if it
-  // somehow doesn't (e.g. a job replayed out of order).
+  // somehow doesn't (e.g. a job replayed out of order). `dedupKey` must be the
+  // SAME namespaced hash stage 1 wrote for this event, so the update lands.
   await prisma.processedComment.upsert({
-    where: { commentId },
+    where: { dedupKey },
     update: {
       matched: data.matched ?? undefined,
       dmSent: data.dmSent ?? undefined,
@@ -83,6 +86,7 @@ async function markProcessed(
     },
     create: {
       commentId,
+      dedupKey,
       commenterId: 'unknown',
       matched: data.matched ?? true,
       dmSent: data.dmSent ?? false,
@@ -104,6 +108,9 @@ export async function processAutomationExecution(
 ): Promise<void> {
   const { prisma, decryptor, metaClient } = deps;
   const { ruleId, eventId, commenterId, source, recipientId } = job;
+  // Same namespaced key stage 1 (webhook-processing) wrote for this event, so the
+  // ledger row is updated in place rather than duplicated.
+  const dedupKey = dedupKeyFor(source === 'message' ? 'msg' : 'cmt', eventId);
 
   const rule = await prisma.automationRule.findFirst({
     where: { id: ruleId, deletedAt: null },
@@ -129,7 +136,7 @@ export async function processAutomationExecution(
 
   if (account.status !== 'CONNECTED') {
     logOutcome({ ...logBase, organizationId: org, outcome: 'needs_reconnect' });
-    await markProcessed(prisma, eventId, { outcome: 'needs_reconnect' });
+    await markProcessed(prisma, eventId, dedupKey, { outcome: 'needs_reconnect' });
     return;
   }
 
@@ -145,7 +152,7 @@ export async function processAutomationExecution(
   });
   if (contact && !contact.isSubscribed) {
     logOutcome({ ...logBase, organizationId: org, outcome: 'unsubscribed' });
-    await markProcessed(prisma, eventId, { outcome: 'unsubscribed' });
+    await markProcessed(prisma, eventId, dedupKey, { outcome: 'unsubscribed' });
     return;
   }
 
@@ -163,7 +170,7 @@ export async function processAutomationExecution(
   });
   if (recentDms >= maxDms) {
     logOutcome({ ...logBase, organizationId: org, outcome: 'rate_limited', recentDms, maxDms });
-    await markProcessed(prisma, eventId, { outcome: 'rate_limited' });
+    await markProcessed(prisma, eventId, dedupKey, { outcome: 'rate_limited' });
     return;
   }
 
@@ -192,7 +199,7 @@ export async function processAutomationExecution(
         usedThisMonth: reservedCount - 1,
         dmLimit,
       });
-      await markProcessed(prisma, eventId, { outcome: 'plan_limit_reached' });
+      await markProcessed(prisma, eventId, dedupKey, { outcome: 'plan_limit_reached' });
       await notifyMonthlyDmLimit(prisma, org, account.connectedByUserId, period);
       return;
     }
@@ -239,7 +246,7 @@ export async function processAutomationExecution(
       }
     }
 
-    await markProcessed(prisma, eventId, { matched: true, dmSent: true, outcome: 'dm_sent' });
+    await markProcessed(prisma, eventId, dedupKey, { matched: true, dmSent: true, outcome: 'dm_sent' });
     logOutcome({ ...logBase, organizationId: org, outcome: 'dm_sent' });
   } catch (error) {
     // The send failed — release the reserved DM slot so the counter only ever
@@ -255,7 +262,7 @@ export async function processAutomationExecution(
         where: { id: account.id },
         data: { status: 'NEEDS_RECONNECT' },
       });
-      await markProcessed(prisma, eventId, {
+      await markProcessed(prisma, eventId, dedupKey, {
         outcome: 'needs_reconnect',
         errorMessage: message,
       });
@@ -263,7 +270,7 @@ export async function processAutomationExecution(
       return;
     }
 
-    await markProcessed(prisma, eventId, { outcome: 'failed', errorMessage: message });
+    await markProcessed(prisma, eventId, dedupKey, { outcome: 'failed', errorMessage: message });
     logOutcome({ ...logBase, organizationId: org, outcome: 'failed', error: message });
     throw error; // let BullMQ retry (attempts: 3, exponential backoff)
   }

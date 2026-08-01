@@ -75,7 +75,10 @@ export class InstagramAccountsService {
       secret: this.config.jwt.accessSecret,
       expiresIn: OAUTH_STATE_TTL,
     });
-    return { url: this.metaGraph.buildAuthorizationUrl(state), state };
+    // New connect → force the account chooser so a second, DIFFERENT account can be
+    // added. Reconnect → keep the same account, no forced re-auth.
+    const forceReauth = !reconnectAccountId;
+    return { url: this.metaGraph.buildAuthorizationUrl(state, forceReauth), state };
   }
 
   /**
@@ -147,6 +150,7 @@ export class InstagramAccountsService {
       create: {
         organizationId,
         instagramBusinessId: profile.id,
+        appScopedId: profile.appScopedId,
         facebookPageId: null, // no Facebook Page in the Instagram Login flow
         username: profile.username,
         name: profile.name,
@@ -164,6 +168,7 @@ export class InstagramAccountsService {
         // org; a freed/removed account is reassigned here.
         organizationId,
         connectedByUserId: userId,
+        appScopedId: profile.appScopedId,
         accessTokenEncrypted: this.tokenEncryption.encrypt(longLived.accessToken),
         tokenExpiresAt,
         username: profile.username,
