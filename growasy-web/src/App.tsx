@@ -32,6 +32,8 @@ import { AdminOverviewPage } from '@/pages/admin/AdminOverviewPage';
 import { AdminCustomersPage } from '@/pages/admin/AdminCustomersPage';
 import { AdminCustomerDetailPage } from '@/pages/admin/AdminCustomerDetailPage';
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
+import { AdminPricingPage } from '@/pages/admin/AdminPricingPage';
+import { AdminCouponsPage } from '@/pages/admin/AdminCouponsPage';
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
 import { ToolsHubPage } from '@/pages/tools/ToolsHubPage';
 import { ToolDetailPage } from '@/pages/tools/ToolDetailPage';
@@ -133,6 +135,8 @@ export function App() {
           <Route path="/admin" element={<AdminOverviewPage />} />
           <Route path="/admin/customers" element={<AdminCustomersPage />} />
           <Route path="/admin/customers/:id" element={<AdminCustomerDetailPage />} />
+          <Route path="/admin/pricing" element={<AdminPricingPage />} />
+          <Route path="/admin/coupons" element={<AdminCouponsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/audit" element={<AdminAuditPage />} />
         </Route>

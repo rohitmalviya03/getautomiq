@@ -12,7 +12,7 @@ import {
 import { ApiBearerAuth, ApiExcludeEndpoint, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { PaymentsService } from './payments.service';
-import { CheckoutDto, VerifyPaymentDto } from './dto/checkout.dto';
+import { CheckoutDto, QuoteDto, VerifyPaymentDto } from './dto/checkout.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentOrgId } from '../../common/decorators/current-org.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -49,6 +49,15 @@ export class PaymentsController {
     return this.payments.cancelSubscription(organizationId);
   }
 
+  /** Price preview (applies plan promo + validates a coupon) — no order created. */
+  @Post('quote')
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader({ name: 'x-organization-id', required: true })
+  @RequirePermissions(PERMISSIONS.BILLING_MANAGE)
+  quote(@CurrentOrgId() organizationId: string, @Body() dto: QuoteDto) {
+    return this.payments.getQuote(organizationId, dto.plan, dto.cycle, dto.couponCode);
+  }
+
   /** Creates a Razorpay order the browser opens in Checkout. */
   @Post('checkout')
   @ApiHeader({ name: 'x-organization-id', required: true })
@@ -58,7 +67,13 @@ export class PaymentsController {
     @CurrentUser('id') userId: string,
     @Body() dto: CheckoutDto,
   ) {
-    return this.payments.createCheckout(organizationId, userId, dto.plan, dto.cycle);
+    return this.payments.createCheckout(
+      organizationId,
+      userId,
+      dto.plan,
+      dto.cycle,
+      dto.couponCode,
+    );
   }
 
   /** Verifies the checkout signature and activates the plan. */

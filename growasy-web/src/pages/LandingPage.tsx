@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { useThemeStore } from '@/stores/theme-store';
 import { useAuthStore } from '@/stores/auth-store';
-import { PLANS, SALES_EMAIL } from '@/lib/plans';
+import { SALES_EMAIL } from '@/lib/plans';
+import { formatMoney, isFreePlan, usePlans } from '@/lib/pricing-api';
 import { useSeo, faqJsonLd } from '@/lib/use-seo';
 
 const FEATURES: { icon: LucideIcon; title: string; desc: string; tags: string[] }[] = [
@@ -108,6 +109,9 @@ export function LandingPage() {
   const toggleTheme = useThemeStore((s) => s.toggle);
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const [yearly, setYearly] = useState(false);
+  // Prices, copy and any live promo come from the admin-managed catalogue.
+  // `usePlans` seeds itself with the bundled fallback, so this never renders empty.
+  const { data: plans = [] } = usePlans();
 
   useSeo(
     'Automiq — Instagram Automation Tool | Comment-to-DM Auto-Reply',
@@ -392,14 +396,16 @@ export function LandingPage() {
           </div>
 
           <div className="aql-price-grid">
-            {PLANS.map((p) => {
-              const free = p.priceMonthly === '₹0';
+            {plans.map((p) => {
+              const price = yearly ? p.yearly : p.monthly;
+              const free = isFreePlan(p);
+              const discounted = price.discount > 0 && price.listPrice > 0;
               return (
-                <div className={`aql-plan${p.popular ? ' pop' : ''}`} key={p.tag}>
-                  {p.popular ? <span className="aql-badge-pop">Most Popular</span> : null}
+                <div className={`aql-plan${p.isPopular ? ' pop' : ''}`} key={p.tier}>
+                  {p.isPopular ? <span className="aql-badge-pop">Most Popular</span> : null}
                   <div className="aql-plan-top">
                     <span className="aql-plan-tag">{p.tag}</span>
-                    {p.bestValue ? <span className="aql-bestvalue">🔥 Best Value</span> : null}
+                    {p.isBestValue ? <span className="aql-bestvalue">🔥 Best Value</span> : null}
                   </div>
                   <p className="aql-plan-sub">{p.subtitle}</p>
 
@@ -415,7 +421,7 @@ export function LandingPage() {
                         className="aql-btn aql-btn-primary aql-plan-cta"
                         href={`mailto:${SALES_EMAIL}?subject=Automiq%20Agency%20plan`}
                       >
-                        {p.cta}
+                        {p.ctaLabel ?? 'Contact Sales'}
                       </a>
                       <p className="aql-plan-note">
                         Everything in Growth, tailored to your agency — white-label reports,
@@ -425,27 +431,39 @@ export function LandingPage() {
                   ) : (
                     <>
                       <div className="aql-price">
-                        <span className="aql-amt">{yearly ? p.priceYearly : p.priceMonthly}</span>
+                        {/* Struck-through original whenever an admin promo is live. */}
+                        {discounted ? (
+                          <span className="aql-was">
+                            {formatMoney(price.listPrice, p.currency)}
+                          </span>
+                        ) : null}
+                        <span className="aql-amt">
+                          {formatMoney(price.amountDue, p.currency)}
+                        </span>
                         <span className="aql-per">{free ? '' : yearly ? '/year' : '/month'}</span>
                       </div>
                       <div className="aql-bill">
-                        {free
-                          ? 'Free forever'
-                          : yearly
-                            ? '2 months free · billed annually'
-                            : 'Billed monthly'}
+                        {discounted && price.promoLabel ? (
+                          <span className="aql-promo">{price.promoLabel}</span>
+                        ) : free ? (
+                          'Free forever'
+                        ) : yearly ? (
+                          '2 months free · billed annually'
+                        ) : (
+                          'Billed monthly'
+                        )}
                       </div>
                       <Link
-                        className={`aql-btn ${p.popular ? 'aql-btn-primary' : 'aql-btn-ghost'} aql-plan-cta`}
-                        to={authed ? '/dashboard' : `/register?plan=${p.key}`}
+                        className={`aql-btn ${p.isPopular ? 'aql-btn-primary' : 'aql-btn-ghost'} aql-plan-cta`}
+                        to={authed ? '/dashboard' : `/register?plan=${p.tier}`}
                       >
-                        {p.cta}
+                        {p.ctaLabel ?? 'Get Started'}
                       </Link>
                       <ul>
-                        {p.inherits ? (
+                        {p.inheritsLabel ? (
                           <li className="aql-inherit">
                             <Check size={16} />
-                            {p.inherits}
+                            {p.inheritsLabel}
                           </li>
                         ) : null}
                         {p.features.map((f) => (
@@ -693,8 +711,10 @@ const CSS = `
 .aql-plan-note { margin-top: 16px; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .aql-price { font-family: var(--ffd); font-weight: 700; letter-spacing: -0.03em; margin: 16px 0 2px; display: flex; align-items: baseline; gap: 5px; }
 .aql-amt { font-size: 38px; }
+.aql-was { font-size: 19px; color: var(--muted); text-decoration: line-through; text-decoration-thickness: 2px; opacity: .75; }
 .aql-per { font-size: 14px; color: var(--muted); font-family: var(--ffb); font-weight: 500; }
 .aql-bill { font-size: 12.5px; color: var(--muted); min-height: 18px; }
+.aql-promo { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 11.5px; letter-spacing: .03em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--violet) 16%, transparent); color: var(--violet); }
 .aql-plan-cta { width: 100%; justify-content: center; margin: 20px 0; }
 .aql-plan ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
 .aql-plan li { font-size: 13.5px; display: flex; gap: 9px; align-items: flex-start; color: var(--text); }

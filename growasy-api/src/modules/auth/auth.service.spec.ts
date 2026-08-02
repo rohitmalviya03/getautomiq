@@ -150,8 +150,11 @@ describe('AuthService', () => {
         { ipAddress: '127.0.0.1', userAgent: 'jest' },
       );
 
+      // (owner, organizationName, planTier) — the plan chosen at signup is
+      // forwarded so the org starts with a pending paid plan when one was picked.
       expect(organizationsService.createWithOwner).toHaveBeenCalledWith(
         expect.objectContaining({ id: baseUser.id }),
+        undefined,
         undefined,
       );
       expect(mailQueue.sendVerificationEmail).toHaveBeenCalledWith(

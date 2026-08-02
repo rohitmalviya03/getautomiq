@@ -11,7 +11,13 @@ import { authApi, usersApi } from '@/lib/auth-api';
 import { ApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth-store';
 import { registerSchema, type RegisterFormValues } from '@/schemas/auth.schemas';
-import { PLANS, type PlanKey } from '@/lib/plans';
+import {
+  formatMoney,
+  isFreePlan,
+  usePlans,
+  FALLBACK_PLANS,
+  type PlanKey,
+} from '@/lib/pricing-api';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -22,10 +28,14 @@ export function RegisterPage() {
 
   // Plan carried over from the pricing page (?plan=); defaults to Free.
   const [searchParams] = useSearchParams();
-  const requested = PLANS.find((p) => p.key === (searchParams.get('plan') ?? '').toUpperCase());
-  // Sales-led plans aren't self-serve — fall back to Free.
-  const selectedPlan = requested && !requested.contactSales ? requested : PLANS[0];
-  const planKey: PlanKey = selectedPlan.key;
+  const { data: plans } = usePlans();
+  const catalogue = plans?.length ? plans : FALLBACK_PLANS;
+  const requested = catalogue.find(
+    (p) => p.tier === (searchParams.get('plan') ?? '').toUpperCase(),
+  );
+  // Sales-led plans aren't self-serve — fall back to the first (Free) plan.
+  const selectedPlan = requested && !requested.contactSales ? requested : catalogue[0];
+  const planKey: PlanKey = selectedPlan.tier;
 
   const {
     register,
@@ -87,9 +97,9 @@ export function RegisterPage() {
               {selectedPlan.tag} plan
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {selectedPlan.priceMonthly === '₹0'
+              {isFreePlan(selectedPlan)
                 ? 'Free forever'
-                : `${selectedPlan.priceMonthly}/mo · start today`}
+                : `${formatMoney(selectedPlan.monthly.amountDue, selectedPlan.currency)}/mo · start today`}
             </p>
           </div>
         </div>

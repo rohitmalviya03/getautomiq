@@ -28,6 +28,8 @@ import {
   SetActiveDto,
   SetSuperAdminDto,
 } from './dto/admin.dto';
+import { UpdatePlanDto, UpsertCouponDto } from './dto/pricing.dto';
+import { AdminPricingService } from './admin-pricing.service';
 
 /**
  * Platform-owner back office. Every route sits behind the global JwtAuthGuard AND
@@ -42,6 +44,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly auth: AuthService,
+    private readonly pricing: AdminPricingService,
   ) {}
 
   private meta(req: Request) {
@@ -217,6 +220,67 @@ export class AdminController {
     @Req() req: Request,
   ) {
     return this.admin.setUserSuspended(id, false, dto, actor, this.meta(req));
+  }
+
+  // --- Pricing ---------------------------------------------------------------
+
+  /** The full catalogue, including hidden/inactive plans, with computed prices. */
+  @Get('plans')
+  listPlans() {
+    return this.pricing.listPlans();
+  }
+
+  /** Edits price / copy / limits / promo. Takes effect everywhere immediately. */
+  @Patch('plans/:id')
+  updatePlan(
+    @Param('id') id: string,
+    @Body() dto: UpdatePlanDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.pricing.updatePlan(id, dto, actor, this.meta(req));
+  }
+
+  // --- Coupons ---------------------------------------------------------------
+
+  @Get('coupons')
+  listCoupons() {
+    return this.pricing.listCoupons();
+  }
+
+  @Post('coupons')
+  createCoupon(
+    @Body() dto: UpsertCouponDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.pricing.createCoupon(dto, actor, this.meta(req));
+  }
+
+  @Patch('coupons/:id')
+  updateCoupon(
+    @Param('id') id: string,
+    @Body() dto: UpsertCouponDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.pricing.updateCoupon(id, dto, actor, this.meta(req));
+  }
+
+  /** Deactivate (never hard-delete — redemptions reference the coupon). */
+  @Post('coupons/:id/deactivate')
+  @HttpCode(HttpStatus.OK)
+  deactivateCoupon(
+    @Param('id') id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.pricing.deactivateCoupon(id, actor, this.meta(req));
+  }
+
+  @Get('coupons/:id/redemptions')
+  couponRedemptions(@Param('id') id: string) {
+    return this.pricing.couponRedemptions(id);
   }
 
   // --- Audit -----------------------------------------------------------------

@@ -4,6 +4,8 @@ import { BillingCycleCron } from './billing-cycle.cron';
 import { RazorpayService } from './razorpay.service';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
+import { PricingService } from './pricing.service';
+import { PlansController } from './plans.controller';
 
 /**
  * Plan-limit enforcement + usage reporting + Razorpay payments. Global so
@@ -12,8 +14,9 @@ import { PaymentsController } from './payments.controller';
  */
 @Global()
 @Module({
-  controllers: [PaymentsController],
-  providers: [PlanLimitsService, BillingCycleCron, RazorpayService, PaymentsService],
-  exports: [PlanLimitsService],
+  controllers: [PaymentsController, PlansController],
+  providers: [PlanLimitsService, BillingCycleCron, RazorpayService, PaymentsService, PricingService],
+  // PricingService is exported so the admin module can price-preview plans it edits.
+  exports: [PlanLimitsService, PricingService],
 })
 export class BillingModule {}

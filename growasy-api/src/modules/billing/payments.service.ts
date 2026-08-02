@@ -8,15 +8,11 @@ import {
 import { OrgPlanTier } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RazorpayService } from './razorpay.service';
+import { PricingService } from './pricing.service';
+import type { BillingCycleInput } from './pricing.service';
 
-/** Billing cycles the checkout accepts. */
-export type BillingCycleInput = 'monthly' | 'yearly';
-/** Only these tiers are self-serve purchasable (Free = free, Agency = sales-led). */
-const PURCHASABLE: OrgPlanTier[] = [
-  OrgPlanTier.STARTER,
-  OrgPlanTier.GROWTH,
-  OrgPlanTier.PROFESSIONAL,
-];
+// Re-exported for the callers that imported it from here before pricing moved out.
+export type { BillingCycleInput };
 
 @Injectable()
 export class PaymentsService {
@@ -25,6 +21,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly razorpay: RazorpayService,
+    private readonly pricing: PricingService,
   ) {}
 
   /** Whether online payments are live (keys set) + the publishable key for Checkout. */
@@ -84,40 +81,102 @@ export class PaymentsService {
     return { cleared: true };
   }
 
-  /** Creates a Razorpay order for the chosen plan + cycle. */
+  /**
+   * Price preview for the billing page — the same computation checkout uses, so
+   * what the customer is shown is exactly what they will be charged. Coupon
+   * problems surface here as a 400 with a customer-facing message.
+   */
+  async getQuote(
+    organizationId: string,
+    plan: OrgPlanTier,
+    cycle: BillingCycleInput,
+    couponCode?: string,
+  ) {
+    const q = await this.pricing.quote(organizationId, plan, cycle, couponCode);
+    return {
+      tier: q.tier,
+      planName: q.planName,
+      cycle: q.cycle,
+      currency: q.currency,
+      listPrice: q.listPrice,
+      promo: q.promo,
+      coupon: q.coupon,
+      totalDiscount: q.totalDiscount,
+      amountDue: q.amountDue,
+      free: q.free,
+    };
+  }
+
+  /** Creates a Razorpay order for the chosen plan + cycle (discounts applied). */
   async createCheckout(
     organizationId: string,
     userId: string,
     plan: OrgPlanTier,
     cycle: BillingCycleInput,
+    couponCode?: string,
   ) {
-    if (!PURCHASABLE.includes(plan)) {
-      throw new BadRequestException('That plan is not available for self-serve checkout.');
-    }
-    const planRow = await this.prisma.plan.findFirst({ where: { tier: plan, isActive: true } });
-    if (!planRow) throw new NotFoundException('Plan not found.');
+    const q = await this.pricing.quote(organizationId, plan, cycle, couponCode);
 
-    const amount = cycle === 'yearly' ? planRow.yearlyPrice : planRow.monthlyPrice;
-    if (amount <= 0) throw new BadRequestException('This plan has no payable amount.');
+    // Discounts wiped the price out. Razorpay won't create an order below ₹1, so
+    // activate directly and record a ₹0 payment for the audit trail.
+    if (q.free) {
+      const syntheticId = `free_${organizationId.slice(0, 8)}_${Date.now().toString(36)}`;
+      const planName = await this.activatePlan(organizationId, plan, cycle, syntheticId, {
+        amount: 0,
+        couponId: q.couponRow?.id ?? null,
+        userId,
+        amountBefore: q.listPrice,
+        method: 'discount_100',
+      });
+      return {
+        free: true as const,
+        planName,
+        amount: 0,
+        currency: q.currency,
+        cycle,
+        totalDiscount: q.totalDiscount,
+      };
+    }
 
     // Razorpay caps `receipt` at 40 chars; a full org UUID (36) blows past it, so
     // use a short prefix + base36 timestamp. The full ids live in `notes` (which
     // activation reads), so the receipt only needs to be a human-scannable ref.
     const receipt = `o_${organizationId.slice(0, 8)}_${Date.now().toString(36)}`;
-    const order = await this.razorpay.createOrder(amount, receipt, {
+    const order = await this.razorpay.createOrder(q.amountDue, receipt, {
       organizationId,
       userId,
       plan,
       cycle,
+      ...(q.coupon ? { couponCode: q.coupon.code } : {}),
+    });
+
+    // Park the server-computed amount + coupon against the order id. Activation
+    // reads this row, so the browser can never talk us into a different price or
+    // claim a coupon it didn't actually check out with.
+    await this.prisma.payment.create({
+      data: {
+        organizationId,
+        amount: q.amountDue,
+        currency: q.currency,
+        status: 'PENDING',
+        method: 'razorpay',
+        externalOrderId: order.id,
+        couponId: q.couponRow?.id ?? null,
+      },
     });
 
     return {
+      free: false as const,
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
       keyId: this.razorpay.keyId,
-      planName: planRow.name,
+      planName: q.planName,
       cycle,
+      listPrice: q.listPrice,
+      totalDiscount: q.totalDiscount,
+      coupon: q.coupon,
+      promo: q.promo,
     };
   }
 
@@ -145,6 +204,7 @@ export class PaymentsService {
       payload.plan,
       payload.cycle,
       payload.razorpay_payment_id,
+      { orderId: payload.razorpay_order_id },
     );
     return { success: true, plan: planName };
   }
@@ -172,6 +232,10 @@ export class PaymentsService {
           notes.plan as OrgPlanTier,
           (notes.cycle as BillingCycleInput) ?? 'monthly',
           paymentId,
+          {
+            orderId: body.payload?.order?.entity?.id,
+            userId: notes.userId ?? null,
+          },
         );
       }
       return;
@@ -198,6 +262,15 @@ export class PaymentsService {
     plan: OrgPlanTier,
     cycle: BillingCycleInput,
     paymentId: string,
+    charge?: {
+      /** Razorpay order id — resolves the PENDING payment holding the real amount. */
+      orderId?: string | null;
+      amount?: number;
+      amountBefore?: number;
+      couponId?: string | null;
+      userId?: string | null;
+      method?: string;
+    },
   ): Promise<string> {
     const existing = await this.prisma.payment.findFirst({
       where: { externalPaymentId: paymentId, status: 'SUCCEEDED' },
@@ -214,7 +287,18 @@ export class PaymentsService {
     const planRow = await this.prisma.plan.findFirst({ where: { tier: plan, isActive: true } });
     if (!planRow) throw new NotFoundException('Plan not found.');
 
-    const amount = cycle === 'yearly' ? planRow.yearlyPrice : planRow.monthlyPrice;
+    // The PENDING row written at checkout is the authority on what was charged
+    // and which coupon was used. Fall back to the list price for orders created
+    // before this existed (or a webhook that arrives with no matching row).
+    const pending = charge?.orderId
+      ? await this.prisma.payment.findFirst({
+          where: { externalOrderId: charge.orderId, status: 'PENDING' },
+        })
+      : null;
+
+    const listPrice = cycle === 'yearly' ? planRow.yearlyPrice : planRow.monthlyPrice;
+    const amount = pending?.amount ?? charge?.amount ?? listPrice;
+    const couponId = pending?.couponId ?? charge?.couponId ?? null;
     const now = new Date();
     const days = cycle === 'yearly' ? 365 : 30;
     const periodEnd = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -247,17 +331,57 @@ export class PaymentsService {
         data: { pendingPlanTier: null, pendingBillingCycle: null },
       });
 
-      const payment = await tx.payment.create({
-        data: {
-          organizationId,
-          amount,
-          currency: 'INR',
-          status: 'SUCCEEDED',
-          method: 'razorpay',
-          externalPaymentId: paymentId,
-          paidAt: now,
-        },
-      });
+      // Settle the PENDING row from checkout when there is one, so a checkout
+      // never leaves an orphan PENDING payment behind.
+      const payment = pending
+        ? await tx.payment.update({
+            where: { id: pending.id },
+            data: {
+              status: 'SUCCEEDED',
+              externalPaymentId: paymentId,
+              method: charge?.method ?? 'razorpay',
+              paidAt: now,
+            },
+          })
+        : await tx.payment.create({
+            data: {
+              organizationId,
+              amount,
+              currency: 'INR',
+              status: 'SUCCEEDED',
+              method: charge?.method ?? 'razorpay',
+              externalPaymentId: paymentId,
+              externalOrderId: charge?.orderId ?? null,
+              couponId,
+              paidAt: now,
+            },
+          });
+
+      // Record the coupon redemption. The unique (couponId, externalPaymentId)
+      // plus skipDuplicates makes this idempotent, so verify and the webhook —
+      // which both land here — can never double-count one redemption.
+      if (couponId) {
+        const created = await tx.couponRedemption.createMany({
+          data: [
+            {
+              couponId,
+              organizationId,
+              userId: charge?.userId ?? null,
+              externalPaymentId: paymentId,
+              amountBefore: charge?.amountBefore ?? listPrice,
+              amountAfter: amount,
+              discountAmount: Math.max(0, (charge?.amountBefore ?? listPrice) - amount),
+            },
+          ],
+          skipDuplicates: true,
+        });
+        if (created.count > 0) {
+          await tx.coupon.update({
+            where: { id: couponId },
+            data: { redeemedCount: { increment: 1 } },
+          });
+        }
+      }
 
       await tx.invoice.create({
         data: {
@@ -301,7 +425,9 @@ export class PaymentsService {
 interface WebhookBody {
   event: string;
   payload?: {
-    order?: { entity?: { notes?: Record<string, string> } };
+    // `order.entity.id` is the Razorpay order id — it resolves the PENDING
+    // Payment row holding the server-computed amount and coupon for this checkout.
+    order?: { entity?: { id?: string; notes?: Record<string, string> } };
     payment?: { entity?: { id?: string; notes?: Record<string, string> } };
   };
 }

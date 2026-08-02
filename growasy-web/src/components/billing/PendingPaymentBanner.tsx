@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { organizationsApi, type OrgUsage } from '@/lib/organizations-api';
 import { billingApi } from '@/lib/billing-api';
 import { loadRazorpay } from '@/lib/razorpay';
-import { PLANS } from '@/lib/plans';
+import { cycleOf, formatMoney, usePlans } from '@/lib/pricing-api';
 import { ApiError } from '@/lib/api-client';
 
 /**
@@ -25,6 +25,7 @@ export function PendingPaymentBanner() {
     queryKey: ['organizations', 'usage'],
     queryFn: organizationsApi.getUsage,
   });
+  const { data: plans = [] } = usePlans();
   const pendingTier = usageQuery.data?.pendingPlanTier ?? null;
 
   const dismiss = useMutation({
@@ -37,16 +38,26 @@ export function PendingPaymentBanner() {
 
   if (!pendingTier) return null;
 
-  const plan = PLANS.find((p) => p.key === pendingTier);
+  const plan = plans.find((p) => p.tier === pendingTier);
   const planName = plan?.tag ?? pendingTier;
   const cycle = usageQuery.data?.pendingBillingCycle === 'yearly' ? 'yearly' : 'monthly';
-  const priceLabel = plan ? (cycle === 'yearly' ? plan.priceYearly : plan.priceMonthly) : '';
+  // The amount actually due — reflects any live promo the admin has set.
+  const priceLabel = plan ? formatMoney(cycleOf(plan, cycle).amountDue, plan.currency) : '';
 
   const payNow = async () => {
     const key = pendingTier as 'STARTER' | 'GROWTH' | 'PROFESSIONAL';
     setBusy(true);
     try {
       const order = await billingApi.checkout(key, cycle);
+
+      // A 100% discount leaves nothing to charge — the server already activated it.
+      if (order.free) {
+        await queryClient.invalidateQueries({ queryKey: ['organizations', 'usage'] });
+        showToast({ variant: 'success', title: `You’re on the ${order.planName} plan 🎉` });
+        setBusy(false);
+        return;
+      }
+
       const ready = await loadRazorpay();
       if (!ready || !window.Razorpay) {
         showToast({ variant: 'error', title: 'Couldn’t load the payment window' });

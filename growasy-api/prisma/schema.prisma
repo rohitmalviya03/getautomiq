@@ -192,6 +192,13 @@ enum BillingCycle {
   YEARLY
 }
 
+/// How a discount is expressed. PERCENT: `value` is 1-100. FLAT: `value` is an
+/// absolute amount in minor units (paise), same unit as Plan.monthlyPrice.
+enum DiscountType {
+  PERCENT
+  FLAT
+}
+
 enum InvoiceStatus {
   DRAFT
   OPEN
@@ -331,6 +338,7 @@ model Organization {
   supportTickets      SupportTicket[]
   trackedLinks        TrackedLink[]
   workflows           Workflow[]
+  couponRedemptions   CouponRedemption[]
 
   @@index([ownerId])
   @@index([deletedAt])
@@ -993,20 +1001,90 @@ model AuditLog {
 // BILLING & SUBSCRIPTIONS
 // ============================================================================
 
+/// The pricing catalogue — the single source of truth for what a plan costs,
+/// what it allows, and how it is advertised. Everything here is editable from
+/// the admin console (Pricing tab); the storefront reads it via GET /plans and
+/// checkout charges from it, so an edit lands everywhere at once.
 model Plan {
   id           String      @id @default(uuid()) @db.Char(36)
   name         String      @db.VarChar(100)
   tier         OrgPlanTier @unique
-  monthlyPrice Int // minor units (cents)
-  yearlyPrice  Int // minor units (cents)
+  monthlyPrice Int // minor units (paise)
+  yearlyPrice  Int // minor units (paise)
   currency     String      @default("USD") @db.VarChar(10)
   limits       String      @db.LongText // JSON-encoded { maxInstagramAccounts, maxContacts, maxAutomations, maxTeamMembers, maxMessagesPerMonth }
   features     String      @db.LongText // JSON-encoded string[] of feature flags/marketing bullets
   isActive     Boolean     @default(true)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+
+  // ---- Storefront copy (previously hardcoded in growasy-web/src/lib/plans.ts) ----
+  tag           String? @db.VarChar(50) // short display name, e.g. "Pro"
+  subtitle      String? @db.VarChar(255)
+  ctaLabel      String? @db.VarChar(60)
+  inheritsLabel String? @db.VarChar(120) // "Everything in Starter, plus:"
+  isPopular     Boolean @default(false)
+  isBestValue   Boolean @default(false)
+  contactSales  Boolean @default(false) // sales-led: hide price, show Contact Sales
+  isPublic      Boolean @default(true) // listed on the pricing pages
+  sortOrder     Int     @default(0)
+
+  // ---- Always-on promotional discount: applies to everyone, no code needed. ----
+  // Inactive when promoType is null or `now` is outside [promoStartsAt, promoEndsAt].
+  promoType     DiscountType?
+  promoValue    Int?
+  promoLabel    String?       @db.VarChar(80) // badge text, e.g. "Launch offer"
+  promoStartsAt DateTime?
+  promoEndsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   subscriptions Subscription[]
+}
+
+/// Admin-issued discount code the customer types at checkout. Stacks on top of
+/// an active plan promo (promo first, then the coupon on the reduced amount).
+model Coupon {
+  id              String       @id @default(uuid()) @db.Char(36)
+  code            String       @unique @db.VarChar(40) // stored upper-cased
+  description     String?      @db.VarChar(255)
+  type            DiscountType
+  value           Int // PERCENT: 1-100 · FLAT: paise
+  appliesToTiers  String       @default("[]") @db.VarChar(255) // JSON OrgPlanTier[] — [] = every purchasable tier
+  appliesToCycles String       @default("[]") @db.VarChar(64) // JSON ("monthly"|"yearly")[] — [] = both
+  maxRedemptions  Int? // global cap; null = unlimited
+  maxPerOrg       Int          @default(1) // per-organization cap
+  redeemedCount   Int          @default(0)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  isActive        Boolean      @default(true)
+  createdById     String?      @db.Char(36)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  redemptions CouponRedemption[]
+
+  @@index([isActive])
+}
+
+/// One row per successful paid activation that used a coupon. The unique on
+/// (couponId, externalPaymentId) makes redemption idempotent, so the verify call
+/// and the webhook — which both activate — can never double-count a redemption.
+model CouponRedemption {
+  id                String   @id @default(uuid()) @db.Char(36)
+  couponId          String   @db.Char(36)
+  organizationId    String   @db.Char(36)
+  userId            String?  @db.Char(36)
+  externalPaymentId String   @db.VarChar(128)
+  amountBefore      Int // paise — the plan's list price, before promo and coupon
+  amountAfter       Int // paise actually charged
+  discountAmount    Int // amountBefore - amountAfter (promo + coupon combined)
+  createdAt         DateTime @default(now())
+
+  coupon       Coupon       @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, externalPaymentId])
+  @@index([organizationId])
 }
 
 model Subscription {
@@ -1062,6 +1140,11 @@ model Payment {
   status            PaymentStatus @default(PENDING)
   method            String?       @db.VarChar(50) // reserved: "card", "bank_transfer", etc.
   externalPaymentId String?       @db.VarChar(128)
+  // Razorpay order id, written when the order is created (status PENDING). It is
+  // how activation finds the *server-computed* amount and coupon for this
+  // checkout instead of trusting anything the browser sends back.
+  externalOrderId   String?       @db.VarChar(128)
+  couponId          String?       @db.Char(36)
   paidAt            DateTime?
   createdAt         DateTime      @default(now())
 
@@ -1070,6 +1153,7 @@ model Payment {
 
   @@index([organizationId])
   @@index([status])
+  @@index([externalOrderId])
 }
 
 model UsageTracking {

@@ -1,10 +1,21 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { ShieldCheck, LayoutDashboard, Building2, Users, ScrollText, ArrowLeft } from 'lucide-react';
+import {
+  ShieldCheck,
+  LayoutDashboard,
+  Building2,
+  Users,
+  ScrollText,
+  ArrowLeft,
+  IndianRupee,
+  Ticket,
+} from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 
 const TABS = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/customers', label: 'Customers', icon: Building2, end: false },
+  { to: '/admin/pricing', label: 'Pricing', icon: IndianRupee, end: false },
+  { to: '/admin/coupons', label: 'Coupons', icon: Ticket, end: false },
   { to: '/admin/users', label: 'Users', icon: Users, end: false },
   { to: '/admin/audit', label: 'Audit log', icon: ScrollText, end: false },
 ];

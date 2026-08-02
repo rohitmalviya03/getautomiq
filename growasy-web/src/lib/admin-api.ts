@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/api-client';
+import type { ServerPlan } from '@/lib/pricing-api';
 
 export interface AdminOverview {
   totals: {
@@ -140,6 +141,90 @@ export interface ChangePlanInput {
   reason?: string;
 }
 
+/** Admin view of a plan — the storefront shape plus the editable promo columns. */
+export interface AdminPlanRow extends ServerPlan {
+  id: string;
+  isActive: boolean;
+  isPublic: boolean;
+  promoType: 'PERCENT' | 'FLAT' | null;
+  promoValue: number | null;
+  promoLabel: string | null;
+  promoStartsAt: string | null;
+  promoEndsAt: string | null;
+}
+
+export interface UpdatePlanInput {
+  name?: string;
+  monthlyPrice?: number;
+  yearlyPrice?: number;
+  tag?: string;
+  subtitle?: string;
+  ctaLabel?: string;
+  inheritsLabel?: string;
+  features?: string[];
+  isPopular?: boolean;
+  isBestValue?: boolean;
+  contactSales?: boolean;
+  isPublic?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
+  maxInstagramAccounts?: number;
+  maxAutomations?: number;
+  maxMessagesPerMonth?: number;
+  maxContacts?: number;
+  maxTeamMembers?: number;
+  aiAgent?: boolean;
+  promoType?: 'PERCENT' | 'FLAT' | null;
+  promoValue?: number | null;
+  promoLabel?: string | null;
+  promoStartsAt?: string | null;
+  promoEndsAt?: string | null;
+  reason?: string;
+}
+
+export interface AdminCoupon {
+  id: string;
+  code: string;
+  description: string | null;
+  type: 'PERCENT' | 'FLAT';
+  value: number;
+  appliesToTiers: string[];
+  appliesToCycles: string[];
+  maxRedemptions: number | null;
+  maxPerOrg: number;
+  redeemedCount: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface UpsertCouponInput {
+  code?: string;
+  description?: string;
+  type?: 'PERCENT' | 'FLAT';
+  value?: number;
+  appliesToTiers?: string[];
+  appliesToCycles?: ('monthly' | 'yearly')[];
+  maxRedemptions?: number | null;
+  maxPerOrg?: number;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isActive?: boolean;
+  reason?: string;
+}
+
+export interface AdminCouponRedemption {
+  id: string;
+  organizationId: string;
+  externalPaymentId: string;
+  amountBefore: number;
+  amountAfter: number;
+  discountAmount: number;
+  createdAt: string;
+  organization: { id: string; name: string; slug: string } | null;
+}
+
 export interface ImpersonateResponse {
   tokens: { accessToken: string; refreshToken: string; expiresIn: string };
   user: { id: string; email: string; firstName: string; lastName: string };
@@ -189,4 +274,18 @@ export const adminApi = {
 
   auditLog: (params: { page?: number; pageSize?: number } = {}) =>
     apiClient.get<Paginated<AdminAuditRow>>(`/admin/audit-log${listQuery(params)}`),
+
+  // ---- Pricing (the storefront + checkout read the same rows) ----------------
+  plans: () => apiClient.get<AdminPlanRow[]>('/admin/plans'),
+  updatePlan: (id: string, body: UpdatePlanInput) =>
+    apiClient.patch<unknown>(`/admin/plans/${id}`, body),
+
+  // ---- Coupons --------------------------------------------------------------
+  coupons: () => apiClient.get<AdminCoupon[]>('/admin/coupons'),
+  createCoupon: (body: UpsertCouponInput) => apiClient.post<AdminCoupon>('/admin/coupons', body),
+  updateCoupon: (id: string, body: UpsertCouponInput) =>
+    apiClient.patch<AdminCoupon>(`/admin/coupons/${id}`, body),
+  deactivateCoupon: (id: string) => apiClient.post<AdminCoupon>(`/admin/coupons/${id}/deactivate`),
+  couponRedemptions: (id: string) =>
+    apiClient.get<AdminCouponRedemption[]>(`/admin/coupons/${id}/redemptions`),
 };

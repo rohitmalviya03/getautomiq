@@ -1,15 +1,34 @@
 import { apiClient } from '@/lib/api-client';
+import type { DiscountLine, PriceQuote, PurchasableKey } from '@/lib/pricing-api';
 
-export interface CheckoutResponse {
+/** Normal path: a Razorpay order to open in Checkout. */
+export interface PaidCheckoutResponse {
+  free: false;
   orderId: string;
   amount: number;
   currency: string;
   keyId: string;
   planName: string;
   cycle: 'monthly' | 'yearly';
+  listPrice: number;
+  totalDiscount: number;
+  coupon: (DiscountLine & { code: string }) | null;
+  promo: DiscountLine | null;
 }
 
-export type PurchasableKey = 'STARTER' | 'GROWTH' | 'PROFESSIONAL';
+/** Discounts covered the full price — the server already activated the plan. */
+export interface FreeCheckoutResponse {
+  free: true;
+  planName: string;
+  amount: 0;
+  currency: string;
+  cycle: 'monthly' | 'yearly';
+  totalDiscount: number;
+}
+
+export type CheckoutResponse = PaidCheckoutResponse | FreeCheckoutResponse;
+
+export type { PurchasableKey };
 
 export interface VerifyPayload {
   razorpay_order_id: string;
@@ -26,8 +45,19 @@ export interface BillingConfig {
 
 export const billingApi = {
   config: () => apiClient.get<BillingConfig>('/billing/config'),
-  checkout: (plan: PurchasableKey, cycle: 'monthly' | 'yearly') =>
-    apiClient.post<CheckoutResponse>('/billing/checkout', { plan, cycle }),
+  /** Price preview incl. plan promo + coupon validation. Throws ApiError on a bad code. */
+  quote: (plan: PurchasableKey, cycle: 'monthly' | 'yearly', couponCode?: string) =>
+    apiClient.post<PriceQuote>('/billing/quote', {
+      plan,
+      cycle,
+      ...(couponCode ? { couponCode } : {}),
+    }),
+  checkout: (plan: PurchasableKey, cycle: 'monthly' | 'yearly', couponCode?: string) =>
+    apiClient.post<CheckoutResponse>('/billing/checkout', {
+      plan,
+      cycle,
+      ...(couponCode ? { couponCode } : {}),
+    }),
   verify: (payload: VerifyPayload) =>
     apiClient.post<{ success: boolean; plan: string }>('/billing/verify', payload),
   cancel: () =>
