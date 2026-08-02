@@ -32,4 +32,5 @@ export const billingApi = {
     apiClient.post<{ success: boolean; plan: string }>('/billing/verify', payload),
   cancel: () =>
     apiClient.post<{ cancelAtPeriodEnd: boolean; currentPeriodEnd: string }>('/billing/cancel'),
+  dismissPending: () => apiClient.post<{ cleared: boolean }>('/billing/dismiss-pending'),
 };

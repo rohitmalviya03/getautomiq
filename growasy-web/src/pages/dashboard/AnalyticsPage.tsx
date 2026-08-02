@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { AnimatedNumber } from '@/components/ui/AnimatedNumber';
 import {
   BarChart3,
   ExternalLink,
@@ -58,13 +60,15 @@ function StatTile({
   sub?: string;
 }) {
   return (
-    <Card>
+    <Card className="card-hover">
       <CardContent className="py-4">
         <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
           <Icon className="h-4 w-4" />
           <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
         </div>
-        <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
+        <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+          {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
+        </p>
         {sub ? <p className="mt-0.5 text-xs text-slate-400">{sub}</p> : null}
       </CardContent>
     </Card>
@@ -107,8 +111,14 @@ function DmsAreaChart({ data }: { data: AnalyticsOverview['dmsPerDay'] }) {
             strokeWidth="1"
           />
         ))}
-        <path d={area} fill="url(#dmFill)" />
-        <path
+        <motion.path
+          d={area}
+          fill="url(#dmFill)"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+        />
+        <motion.path
           d={line}
           fill="none"
           stroke={HUE}
@@ -116,12 +126,25 @@ function DmsAreaChart({ data }: { data: AnalyticsOverview['dmsPerDay'] }) {
           strokeLinejoin="round"
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1, ease: 'easeInOut' }}
         />
-        {/* hover targets (native tooltip) */}
+        {/* visible dots + generous hover targets (native tooltip) */}
         {data.map((d, i) => (
-          <circle key={d.date} cx={x(i)} cy={y(d.count)} r="6" fill="transparent">
-            <title>{`${d.date}: ${d.count} DM${d.count === 1 ? '' : 's'}`}</title>
-          </circle>
+          <g key={d.date} className="group">
+            <circle cx={x(i)} cy={y(d.count)} r="2.5" fill={HUE} className="opacity-70" />
+            <circle
+              cx={x(i)}
+              cy={y(d.count)}
+              r="9"
+              fill={HUE}
+              className="opacity-0 transition-opacity group-hover:opacity-20"
+            />
+            <circle cx={x(i)} cy={y(d.count)} r="10" fill="transparent">
+              <title>{`${d.date}: ${d.count} DM${d.count === 1 ? '' : 's'}`}</title>
+            </circle>
+          </g>
         ))}
       </svg>
       <div className="mt-1 flex justify-between text-xs text-slate-400">
@@ -147,9 +170,12 @@ function BarList({ rows }: { rows: { label: string; value: number }[] }) {
             {r.label}
           </span>
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-            <div
+            <motion.div
               className="h-full rounded-full"
-              style={{ width: `${(r.value / max) * 100}%`, backgroundColor: HUE }}
+              style={{ backgroundColor: HUE }}
+              initial={{ width: 0 }}
+              animate={{ width: `${(r.value / max) * 100}%` }}
+              transition={{ duration: 0.7, ease: 'easeOut' }}
               title={`${r.value}`}
             />
           </div>

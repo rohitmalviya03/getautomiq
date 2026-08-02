@@ -62,11 +62,22 @@ export default {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-6px)' },
         },
+        // Draw-in for sparklines / chart lines.
+        dash: {
+          from: { strokeDashoffset: '240' },
+          to: { strokeDashoffset: '0' },
+        },
+        // Sweeping highlight for loading skeletons.
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
+        },
       },
       animation: {
         'toast-in': 'toast-in 0.2s ease-out',
         'gradient-pan': 'gradient-pan 6s ease infinite',
         float: 'float 6s ease-in-out infinite',
+        dash: 'dash 1.1s ease-out forwards',
+        shimmer: 'shimmer 1.5s infinite',
       },
     },
   },

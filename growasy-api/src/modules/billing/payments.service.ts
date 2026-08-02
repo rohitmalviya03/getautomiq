@@ -75,6 +75,15 @@ export class PaymentsService {
     return updated;
   }
 
+  /** User chose to stay on Free — clear the pending-payment prompt. */
+  async dismissPendingPlan(organizationId: string): Promise<{ cleared: boolean }> {
+    await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: { pendingPlanTier: null, pendingBillingCycle: null },
+    });
+    return { cleared: true };
+  }
+
   /** Creates a Razorpay order for the chosen plan + cycle. */
   async createCheckout(
     organizationId: string,
@@ -91,7 +100,11 @@ export class PaymentsService {
     const amount = cycle === 'yearly' ? planRow.yearlyPrice : planRow.monthlyPrice;
     if (amount <= 0) throw new BadRequestException('This plan has no payable amount.');
 
-    const order = await this.razorpay.createOrder(amount, `org_${organizationId}_${Date.now()}`, {
+    // Razorpay caps `receipt` at 40 chars; a full org UUID (36) blows past it, so
+    // use a short prefix + base36 timestamp. The full ids live in `notes` (which
+    // activation reads), so the receipt only needs to be a human-scannable ref.
+    const receipt = `o_${organizationId.slice(0, 8)}_${Date.now().toString(36)}`;
+    const order = await this.razorpay.createOrder(amount, receipt, {
       organizationId,
       userId,
       plan,
@@ -226,6 +239,12 @@ export class PaymentsService {
           currentPeriodStart: now,
           currentPeriodEnd: periodEnd,
         },
+      });
+
+      // Payment done → clear any "complete payment" prompt for this org.
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { pendingPlanTier: null, pendingBillingCycle: null },
       });
 
       const payment = await tx.payment.create({

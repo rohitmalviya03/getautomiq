@@ -105,7 +105,11 @@ export function BillingPage() {
           try {
             await billingApi.verify({ ...resp, plan: key, cycle });
             await queryClient.invalidateQueries({ queryKey: ['organizations', 'usage'] });
-            showToast({ variant: 'success', title: `You’re on the ${plan.tag} plan 🎉` });
+            showToast({
+              variant: 'success',
+              title: `You’re on the ${plan.tag} plan 🎉`,
+              description: 'Your full monthly DM allowance is available right now.',
+            });
           } catch {
             showToast({
               variant: 'error',
@@ -220,6 +224,19 @@ export function BillingPage() {
                 />
               </div>
             )}
+            {usage ? (
+              <p className="text-xs text-slate-400">
+                Your DM quota resets on{' '}
+                <span className="font-medium text-slate-500 dark:text-slate-300">
+                  {new Date(usage.dmResetsAt).toLocaleDateString(undefined, {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </span>
+                . Upgrading gives you the new plan's full monthly allowance right away.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
 

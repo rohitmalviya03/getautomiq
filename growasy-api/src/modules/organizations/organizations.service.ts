@@ -11,8 +11,6 @@ import { PlanLimitsService } from '../billing/plan-limits.service';
 import { slugWithSuffix } from '../../common/utils/slug.util';
 import { SYSTEM_ROLES, SYSTEM_ROLE_PERMISSIONS } from '../../common/constants/permissions.constant';
 
-const TRIAL_PERIOD_DAYS = 14;
-
 /** Shared include for member queries — user identity + role, no secrets. */
 const MEMBER_INCLUDE = {
   user: { select: { id: true, firstName: true, lastName: true, email: true, avatarUrl: true } },
@@ -36,7 +34,12 @@ export class OrganizationsService {
    * OWNER, and (best-effort) starts a Starter trial subscription. Runs inside
    * a single transaction so a partial failure never leaves an orphaned org.
    */
-  async createWithOwner(owner: User, name?: string, planTier?: OrgPlanTier) {
+  async createWithOwner(
+    owner: User,
+    name?: string,
+    planTier?: OrgPlanTier,
+    billingCycle?: string,
+  ) {
     const organizationName = name?.trim() || `${owner.firstName}'s Workspace`;
 
     return this.prisma.$transaction(async (tx) => {
@@ -86,52 +89,61 @@ export class OrganizationsService {
         }
       }
 
-      await this.startSubscription(tx, organization.id, planTier);
+      await this.startSubscription(tx, organization.id, planTier, billingCycle);
 
       return organization;
     });
   }
 
   /**
-   * Puts a new org on its chosen plan. Free → immediately ACTIVE; a paid plan →
-   * TRIALING for the trial window. Falls back to Free if the requested tier isn't
-   * an offered/active plan (e.g. a coming-soon or retired tier).
+   * Every new org starts on **Free** (immediately ACTIVE). If the user picked a
+   * paid plan on the pricing page we do NOT grant it — instead we record it as
+   * `pendingPlanTier` so the dashboard prompts them to complete payment. Paid
+   * features stay locked (the org is Free) until payment succeeds. No free trial.
    */
   private async startSubscription(
     tx: Prisma.TransactionClient,
     organizationId: string,
     planTier?: OrgPlanTier,
+    billingCycle?: string,
   ) {
-    const tier = planTier ?? OrgPlanTier.FREE;
-    const plan =
-      (await tx.plan.findFirst({ where: { tier, isActive: true } })) ??
-      (await tx.plan.findFirst({ where: { tier: OrgPlanTier.FREE, isActive: true } }));
-    if (!plan) {
+    const freePlan = await tx.plan.findFirst({ where: { tier: OrgPlanTier.FREE, isActive: true } });
+    const now = new Date();
+
+    if (freePlan) {
+      await tx.subscription.create({
+        data: {
+          organizationId,
+          planId: freePlan.id,
+          status: 'ACTIVE',
+          billingCycle: 'MONTHLY',
+          currentPeriodStart: now,
+          currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
+    } else {
       this.logger.warn(
-        `No active plan for tier ${tier} (run prisma:seed) — skipping subscription for org ${organizationId}`,
+        `No active FREE plan (run prisma:seed) — skipping subscription for org ${organizationId}`,
       );
-      return;
     }
 
-    const now = new Date();
-    const isPaid = plan.monthlyPrice > 0;
-    const trialEndsAt = isPaid
-      ? new Date(now.getTime() + TRIAL_PERIOD_DAYS * 24 * 60 * 60 * 1000)
-      : null;
-    const periodEnd =
-      trialEndsAt ?? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-    await tx.subscription.create({
-      data: {
-        organizationId,
-        planId: plan.id,
-        status: isPaid ? 'TRIALING' : 'ACTIVE',
-        billingCycle: 'MONTHLY',
-        currentPeriodStart: now,
-        currentPeriodEnd: periodEnd,
-        trialEndsAt,
-      },
-    });
+    // Remember a chosen paid tier as pending — activated only after payment.
+    const tier = planTier ?? OrgPlanTier.FREE;
+    if (tier !== OrgPlanTier.FREE) {
+      const paid = await tx.plan.findFirst({
+        where: { tier, isActive: true, monthlyPrice: { gt: 0 } },
+        select: { id: true },
+      });
+      if (paid) {
+        await tx.organization.update({
+          where: { id: organizationId },
+          data: {
+            pendingPlanTier: tier,
+            pendingBillingCycle: billingCycle === 'yearly' ? 'yearly' : 'monthly',
+          },
+        });
+      }
+    }
   }
 
   async findById(organizationId: string) {

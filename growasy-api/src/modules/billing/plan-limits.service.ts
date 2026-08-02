@@ -63,6 +63,23 @@ export function billingPeriodKey(anchor: Date | null | undefined, now = new Date
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
 }
 
+/** When the monthly DM counter next resets — the anchor day of the upcoming window. */
+export function nextDmReset(anchor: Date | null | undefined, now = new Date()): Date {
+  const anchorDay = anchor ? anchor.getUTCDate() : 1;
+  let y = now.getUTCFullYear();
+  let m = now.getUTCMonth();
+  const startThisMonth = Math.min(anchorDay, daysInMonth(y, m));
+  if (now.getUTCDate() >= startThisMonth) {
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  const day = Math.min(anchorDay, daysInMonth(y, m));
+  return new Date(Date.UTC(y, m, day));
+}
+
 /**
  * Single source of truth for plan-limit enforcement + usage reporting. Limits
  * live on the org's Subscription→Plan (`limits` JSON); usage lives in
@@ -198,7 +215,7 @@ export class PlanLimitsService {
     const ctx = await this.getPlanContext(organizationId);
     const period = billingPeriodKey(ctx?.currentPeriodStart ?? null);
 
-    const [accountsUsed, activeRulesUsed, membersUsed, dmUsage] = await Promise.all([
+    const [accountsUsed, activeRulesUsed, membersUsed, dmUsage, org] = await Promise.all([
       this.prisma.instagramAccount.count({ where: { organizationId, deletedAt: null } }),
       this.prisma.automationRule.count({
         where: { organizationId, status: 'ACTIVE', deletedAt: null },
@@ -211,11 +228,19 @@ export class PlanLimitsService {
           organizationId_metric_period: { organizationId, metric: 'MESSAGES_SENT', period },
         },
       }),
+      this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { pendingPlanTier: true, pendingBillingCycle: true },
+      }),
     ]);
 
     return {
       planName: ctx?.planName ?? 'None',
       tier: ctx?.tier ?? null,
+      // Set when a paid plan was chosen at signup but not yet paid for. The frontend
+      // maps the tier to a name/price and shows a "complete payment" prompt.
+      pendingPlanTier: org?.pendingPlanTier ?? null,
+      pendingBillingCycle: org?.pendingBillingCycle ?? null,
       accountsUsed,
       accountsLimit: ctx?.limits.maxInstagramAccounts ?? UNLIMITED,
       activeRulesUsed,
@@ -224,6 +249,7 @@ export class PlanLimitsService {
       teamMembersLimit: ctx?.limits.maxTeamMembers ?? UNLIMITED,
       dmsUsedThisMonth: dmUsage?.count ?? 0,
       dmsLimit: ctx?.limits.maxMessagesPerMonth ?? UNLIMITED,
+      dmResetsAt: nextDmReset(ctx?.currentPeriodStart ?? null).toISOString(),
       billingCycleAnchor: ctx?.currentPeriodStart ?? null,
       period,
     };

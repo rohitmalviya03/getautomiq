@@ -1,0 +1,236 @@
+# =============================================================================
+# Growasy / Automiq — DEVELOPMENT stack. The counterpart to docker-compose.yml
+# (which stays exactly as it is: the production single-VPS topology).
+#
+#   dev   →  docker compose -f docker-compose.dev.yml up        (or ./scripts/dc.sh dev up)
+#   prod  →  docker compose up -d                               (or ./scripts/dc.sh prod up -d)
+#
+# What's different from production, and why:
+#   * Source is BIND-MOUNTED and every service runs its watcher (nest --watch,
+#     tsx watch, vite) — edit on the host, the container reloads. No rebuild.
+#   * Everything is PUBLISHED on localhost (DB, Redis, API, worker, web, mail)
+#     so host tooling — Prisma Studio, MySQL Workbench, a native `npm run dev`
+#     — keeps working against the same containers.
+#   * No read_only / cap_drop / resource limits. Those protect production; in
+#     dev they only make hot reload and debugging harder.
+#   * Ports and credentials match the per-service .env.example files already in
+#     the repo (MySQL on 3333, Redis 6379, API 4000, worker 4100, web 5173,
+#     SMTP 1025), so switching between "native npm dev" and "docker dev" needs
+#     no config edits at all.
+#
+# Config comes from the SAME per-service env files you already use for native
+# local dev — growasy-api/.env, growasy-worker/.env — with only the host-facing
+# values (DATABASE_URL, REDIS_HOST, SMTP_HOST) overridden to container names.
+# Those files are optional here; without them the defaults below still boot.
+#
+# The project name is `growasy-dev`, so dev containers, networks and volumes can
+# never collide with the production stack (`growasy`) on the same machine.
+#
+# Overridable knobs (export them, or put them in .env — all DEV_-prefixed so the
+# production .env in this directory can never bleed into the dev stack):
+#   DEV_MYSQL_PORT=3333  DEV_REDIS_PORT=6379  DEV_API_PORT=4000
+#   DEV_WORKER_PORT=4100 DEV_WEB_PORT=5173    DEV_MAILPIT_UI_PORT=8025
+# =============================================================================
+
+name: growasy-dev
+
+services:
+  # ---------------------------------------------------------------------------
+  # MySQL 8.0 — same engine/flags as production so schema behaviour matches.
+  # Published on 3333 to line up with the DATABASE_URL in the .env.example files.
+  # ---------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command: >-
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${DEV_MYSQL_DATABASE:-growasy}
+      MYSQL_ROOT_PASSWORD: ${DEV_MYSQL_ROOT_PASSWORD:-123456}
+    ports:
+      - '${DEV_MYSQL_PORT:-3333}:3306'
+    volumes:
+      - mysql_dev_data:/var/lib/mysql
+    networks: [growasy_dev]
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — BullMQ broker. No password in dev (matches REDIS_PASSWORD= in the
+  # .env.example files); noeviction still applies so jobs are never dropped.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >-
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+    ports:
+      - '${DEV_REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_dev_data:/data
+    networks: [growasy_dev]
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Mailpit — catches every outgoing email instead of sending it. SMTP on 1025
+  # (what the .env.example files already point at), web inbox on 8025.
+  # ---------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: '500'
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    ports:
+      - '${DEV_MAILPIT_SMTP_PORT:-1025}:1025' # SMTP
+      - '${DEV_MAILPIT_UI_PORT:-8025}:8025' # inbox UI → http://localhost:8025
+    networks: [growasy_dev]
+
+  # ---------------------------------------------------------------------------
+  # API — NestJS in watch mode. Applies pending migrations on start (safe here:
+  # exactly one replica in dev; production still migrates from deploy.sh).
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ./growasy-api
+      target: dev
+      args:
+        NODE_VERSION: '22'
+    image: growasy-api:dev
+    restart: unless-stopped
+    command: sh -c "npx prisma migrate deploy && npm run start:dev"
+    env_file:
+      - path: ./growasy-api/.env
+        required: false
+    environment:
+      NODE_ENV: development
+      PORT: '4000'
+      # Container-network overrides of the host-facing values in the .env file.
+      DATABASE_URL: mysql://root:${DEV_MYSQL_ROOT_PASSWORD:-123456}@mysql:3306/${DEV_MYSQL_DATABASE:-growasy}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ''
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      CHOKIDAR_USEPOLLING: 'true'
+    ports:
+      - '${DEV_API_PORT:-4000}:4000'
+      - '${DEV_API_DEBUG_PORT:-9229}:9229' # node --inspect
+    volumes:
+      # Live source. The anonymous volume shadows the host's node_modules: the
+      # container needs its own musl build (the host's is Windows/glibc and its
+      # Prisma engine binary won't run on Alpine).
+      # `dist` is intentionally NOT shadowed — nest --watch deletes and recreates
+      # that directory on every rebuild, which fails with EBUSY on a mount point.
+      - ./growasy-api:/app
+      - /app/node_modules
+    networks: [growasy_dev]
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    init: true
+
+  # ---------------------------------------------------------------------------
+  # Worker — BullMQ consumer under `tsx watch`.
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./growasy-worker
+      target: dev
+      args:
+        NODE_VERSION: '22'
+    image: growasy-worker:dev
+    restart: unless-stopped
+    env_file:
+      - path: ./growasy-worker/.env
+        required: false
+    environment:
+      NODE_ENV: development
+      HEALTH_PORT: '4100'
+      DATABASE_URL: mysql://root:${DEV_MYSQL_ROOT_PASSWORD:-123456}@mysql:3306/${DEV_MYSQL_DATABASE:-growasy}
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ''
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      CHOKIDAR_USEPOLLING: 'true'
+    ports:
+      - '${DEV_WORKER_PORT:-4100}:4100'
+    volumes:
+      - ./growasy-worker:/app
+      - /app/node_modules
+    networks: [growasy_dev]
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      # The API owns the schema — let its migrations land before the worker
+      # starts querying. `service_started` is enough: it starts after migrate.
+      api: { condition: service_started }
+    init: true
+
+  # ---------------------------------------------------------------------------
+  # Web — Vite dev server with HMR. No nginx in dev: /api is proxied straight to
+  # the api container (VITE_PROXY_TARGET, see growasy-web/vite.config.ts), so the
+  # browser stays same-origin exactly like it does behind nginx in production.
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: ./growasy-web
+      target: dev
+      args:
+        NODE_VERSION: '22'
+    image: growasy-web:dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      # Same-origin path — Vite proxies it to the API (see below).
+      VITE_API_BASE_URL: /api/v1
+      VITE_PROXY_TARGET: http://api:4000
+      CHOKIDAR_USEPOLLING: 'true'
+    ports:
+      - '${DEV_WEB_PORT:-5173}:5173'
+    volumes:
+      - ./growasy-web:/app
+      - /app/node_modules
+    networks: [growasy_dev]
+    depends_on: [api]
+
+  # ---------------------------------------------------------------------------
+  # Adminer — browser DB client on http://localhost:8080 (server: mysql,
+  # user: root). Opt-in, so the default `up` stays lean:
+  #     docker compose -f docker-compose.dev.yml --profile tools up -d
+  # ---------------------------------------------------------------------------
+  adminer:
+    image: adminer:latest
+    profiles: [tools]
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    ports:
+      - '${DEV_ADMINER_PORT:-8080}:8080'
+    networks: [growasy_dev]
+    depends_on:
+      mysql: { condition: service_healthy }
+
+networks:
+  growasy_dev:
+    driver: bridge
+
+volumes:
+  mysql_dev_data:
+  redis_dev_data:

@@ -82,8 +82,8 @@ const FEATURES: { icon: LucideIcon; title: string; desc: string; tags: string[] 
 
 const FAQS = [
   {
-    q: 'How does the free trial work?',
-    a: 'Start on any paid plan free — no credit card required. You get full access during the trial; cancel any time before it ends and you won’t be charged.',
+    q: 'How do I get started?',
+    a: 'Sign up free — no credit card required — and start on the Free plan right away. Pick a paid plan any time; you complete a quick secure payment and its features unlock instantly. Cancel whenever; you keep access until the period ends.',
   },
   {
     q: 'Do you charge based on contacts?',

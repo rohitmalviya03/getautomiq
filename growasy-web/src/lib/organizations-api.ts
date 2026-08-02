@@ -16,6 +16,9 @@ export interface OrganizationDetail {
 export interface OrgUsage {
   planName: string;
   tier: string | null;
+  /** A paid plan chosen at signup awaiting payment (drives the dashboard prompt). Null once paid/dismissed. */
+  pendingPlanTier: string | null;
+  pendingBillingCycle: string | null;
   accountsUsed: number;
   accountsLimit: number;
   activeRulesUsed: number;
@@ -24,6 +27,8 @@ export interface OrgUsage {
   teamMembersLimit: number;
   dmsUsedThisMonth: number;
   dmsLimit: number;
+  /** ISO date when the monthly DM counter next resets. */
+  dmResetsAt: string;
   billingCycleAnchor: string | null;
   period: string;
 }

@@ -274,6 +274,19 @@ export class AdminService {
 
     const before = org.subscription ? { ...org.subscription } : null;
 
+    // On a tier change, roll the billing period to now — same as a self-serve
+    // upgrade — so the monthly DM counter resets and the customer immediately gets
+    // the new plan's full allowance. (Status/trial-only edits keep the period.)
+    const now = new Date();
+    const cycle = dto.billingCycle ?? org.subscription?.billingCycle ?? BillingCycle.MONTHLY;
+    const periodDays = cycle === BillingCycle.YEARLY ? 365 : 30;
+    const periodReset = dto.tier
+      ? {
+          currentPeriodStart: now,
+          currentPeriodEnd: new Date(now.getTime() + periodDays * 864e5),
+        }
+      : {};
+
     let subscription;
     if (org.subscription) {
       subscription = await this.prisma.subscription.update({
@@ -284,12 +297,12 @@ export class AdminService {
           billingCycle: dto.billingCycle,
           trialEndsAt,
           cancelAtPeriodEnd: dto.cancelAtPeriodEnd,
+          ...periodReset,
         },
         include: { plan: { select: { name: true, tier: true } } },
       });
     } else {
       if (!planId) throw new BadRequestException('A tier is required to create a subscription');
-      const now = new Date();
       subscription = await this.prisma.subscription.create({
         data: {
           organizationId: orgId,

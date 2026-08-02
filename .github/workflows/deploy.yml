@@ -1,0 +1,91 @@
+name: Build & Deploy
+
+# Build all three images, push to GHCR, then SSH into the VPS and roll the
+# stack via scripts/deploy.sh (which migrates + health-checks + fails hard).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & push (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: api
+            context: ./growasy-api
+            build_args: ''
+          - service: worker
+            context: ./growasy-worker
+            build_args: ''
+          - service: web
+            context: ./growasy-web
+            build_args: |
+              VITE_API_BASE_URL=/api/v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase owner (GHCR requires lowercase)
+        id: repo
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/growasy-${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/growasy-${{ matrix.service }}:${{ github.sha }}
+          # Build-cache in GHA so unchanged layers are reused across runs.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          # APP_DIR = where the repo is checked out on the VPS (holds docker-compose.yml + .env)
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.APP_DIR }}"
+            # Fetch compose/nginx/script changes (images come from GHCR, not git).
+            git pull --ff-only
+            # Authenticate to GHCR to pull the freshly-pushed images.
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            # Deploy the exact commit we just built + verify health (fails non-zero).
+            IMAGE_TAG="${{ github.sha }}" ./scripts/deploy.sh

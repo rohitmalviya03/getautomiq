@@ -301,6 +301,10 @@ model Organization {
   logoUrl   String?   @db.VarChar(1024)
   timezone  String    @default("UTC") @db.VarChar(64)
   isActive  Boolean   @default(true)
+  // Plan chosen at signup that still needs payment. While set, the org stays on
+  // Free (paid features locked) and the dashboard prompts to complete payment.
+  pendingPlanTier     OrgPlanTier?
+  pendingBillingCycle String?   @db.VarChar(10)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

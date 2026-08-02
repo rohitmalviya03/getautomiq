@@ -1,9 +1,34 @@
+# Keep the build context small + never leak local artifacts/secrets into images.
+# node_modules is reinstalled inside the image from package-lock (reproducible).
 node_modules
 dist
+build
 coverage
+.nyc_output
+
+# Secrets & local env — images get config at runtime via env_file, never baked in.
 .env
-.env.local
-*.log
+.env.*
+!.env.example
+
+# VCS / editor / OS
 .git
+.gitignore
 .vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Tests & tooling not needed in the production image
 test
+**/*.spec.ts
+**/*.test.ts
+.eslintrc*
+.prettierrc*
+*.log
+npm-debug.log*
+
+# Docs / CI (not needed inside the app image)
+README*.md
+Dockerfile
+.dockerignore

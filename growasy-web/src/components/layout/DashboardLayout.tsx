@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
 import { ReconnectBanner } from '@/components/layout/ReconnectBanner';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
+import { PendingPaymentBanner } from '@/components/billing/PendingPaymentBanner';
 
 export function DashboardLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -55,6 +56,7 @@ export function DashboardLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenuClick={() => setMobileNavOpen(true)} />
         <div className="flex-1 overflow-y-auto">
+          <PendingPaymentBanner />
           <ReconnectBanner />
           <main className="px-4 py-6 sm:px-6 lg:px-8">
             <Outlet />

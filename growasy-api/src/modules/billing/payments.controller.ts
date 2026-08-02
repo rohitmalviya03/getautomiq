@@ -31,6 +31,15 @@ export class PaymentsController {
     return this.payments.getConfig();
   }
 
+  /** Dismisses the "complete payment" prompt (stay on Free). */
+  @Post('dismiss-pending')
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader({ name: 'x-organization-id', required: true })
+  @RequirePermissions(PERMISSIONS.BILLING_MANAGE)
+  dismissPending(@CurrentOrgId() organizationId: string) {
+    return this.payments.dismissPendingPlan(organizationId);
+  }
+
   /** Cancels the current paid plan at period end (keeps access until then). */
   @Post('cancel')
   @HttpCode(HttpStatus.OK)
