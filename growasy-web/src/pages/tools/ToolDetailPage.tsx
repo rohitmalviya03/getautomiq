@@ -1,13 +1,15 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { PublicShell, ToolCta } from '@/components/public/PublicShell';
-import { useSeo, faqJsonLd, breadcrumbJsonLd } from '@/lib/use-seo';
+import { useSeo, faqJsonLd, breadcrumbJsonLd, SITE_URL } from '@/lib/use-seo';
 import { TOOLS, findTool } from './tools-meta';
 
 export function ToolDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const tool = findTool(slug);
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://getautomiq.com';
+  // Structured-data URLs must be the canonical host, not whatever hostname the
+  // page happens to be served from.
+  const origin = SITE_URL;
 
   // Hooks must run unconditionally — fall back to a generic title if unknown.
   useSeo(

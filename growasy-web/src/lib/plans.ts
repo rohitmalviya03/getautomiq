@@ -8,8 +8,8 @@
  */
 export type { PlanKey } from '@/lib/pricing-api';
 
-/** Where "Contact Sales" buttons point. */
-export const SALES_EMAIL = 'sales@getautomiq.com';
+/** Where "Contact Sales" buttons point. Must stay a mailbox that actually exists. */
+export const SALES_EMAIL = 'hello@getautomiq.online';
 
 /**
  * Plan tiers ranked low→high. Gates which app features/menu items a plan unlocks:

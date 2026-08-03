@@ -24,4 +24,4 @@ Allow: /
 User-agent: Google-Extended
 Allow: /
 
-Sitemap: https://getautomiq.com/sitemap.xml
+Sitemap: https://app.getautomiq.in/sitemap.xml

@@ -113,9 +113,12 @@ export function LandingPage() {
   // `usePlans` seeds itself with the bundled fallback, so this never renders empty.
   const { data: plans = [] } = usePlans();
 
+  // Kept identical to the <title>/description in index.html: this route is "/",
+  // so a different string here would mean crawlers that execute JS see one title
+  // and those that don't see another.
   useSeo(
-    'Automiq — Instagram Automation Tool | Comment-to-DM Auto-Reply',
-    'Automiq automates Instagram: auto-reply to comments, DM your links, and capture leads on autopilot. Comment-to-DM, story replies & keyword automation. Start free — no card, no Facebook Page.',
+    'Automiq - Instagram Automation for Creators & Businesses',
+    'Automate Instagram DMs, comment replies, lead capture and customer engagement with Automiq.',
     faqJsonLd(FAQS),
   );
 

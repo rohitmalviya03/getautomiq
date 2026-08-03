@@ -2,76 +2,92 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#8232d6" />
+    <meta name="theme-color" content="#000000" />
 
-    <!-- ===== SEO ===== -->
-    <title>Automiq — Instagram Automation Tool (Comment → DM, Auto-Reply)</title>
+    <!-- ===== SEO =====
+         Canonical host is app.getautomiq.in. Every absolute URL here — canonical,
+         og:url, JSON-LD @id/url — plus robots.txt, sitemap.xml and llms.txt must
+         use it. A canonical pointing at a host that doesn't serve the site tells
+         Google to consolidate everything onto a dead URL. -->
+    <title>Automiq - Instagram Automation for Creators &amp; Businesses</title>
     <meta
       name="description"
-      content="Automiq is an Instagram automation tool that auto-replies to comments, sends DMs with your links, and captures leads on autopilot. Comment-to-DM, story-reply &amp; keyword automation. Start free — no card, no Facebook Page."
+      content="Automate Instagram DMs, comment replies, lead capture and customer engagement with Automiq."
     />
     <meta
       name="keywords"
-      content="instagram automation, instagram automation tool, comment to dm, instagram dm automation, auto reply instagram, instagram auto dm, instagram lead generation, manychat alternative"
+      content="instagram automation, auto dm, comment automation, instagram bot, ai dm, creator tools, business automation"
     />
     <meta name="author" content="Automiq" />
-    <meta name="robots" content="index, follow, max-image-preview:large" />
-    <link rel="canonical" href="https://getautomiq.com/" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://app.getautomiq.in/" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Automiq" />
-    <meta property="og:title" content="Automiq — Instagram Automation Tool (Comment → DM)" />
+    <meta
+      property="og:title"
+      content="Automiq - Instagram Automation for Creators &amp; Businesses"
+    />
     <meta
       property="og:description"
-      content="Auto-reply to Instagram comments, DM your links, and capture leads on autopilot. Start free — no card needed."
+      content="Automate Instagram DMs, comment replies, lead capture and customer engagement with Automiq."
     />
-    <meta property="og:url" content="https://getautomiq.com/" />
+    <meta property="og:url" content="https://app.getautomiq.in/" />
+    <meta property="og:image" content="https://app.getautomiq.in/og-image.png" />
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Automiq — Instagram Automation Tool" />
+    <meta
+      name="twitter:title"
+      content="Automiq - Instagram Automation for Creators &amp; Businesses"
+    />
     <meta
       name="twitter:description"
-      content="Turn Instagram comments into customers — auto-reply, DM links, capture leads on autopilot. Start free."
+      content="Automate Instagram DMs, comment replies, lead capture and customer engagement with Automiq."
     />
+    <meta name="twitter:image" content="https://app.getautomiq.in/og-image.png" />
 
-    <!-- ===== Structured data (Schema.org) — parsed by Google & AI engines ===== -->
+    <!-- ===== Structured data (Schema.org) — parsed by Google & AI engines =====
+         `offers` was removed on purpose: prices are now admin-editable in the
+         database, so hardcoding them here would drift from what the pricing
+         section renders, and Google penalises structured data that disagrees
+         with the visible page. Emit them from /api/v1/plans if rich pricing
+         results are wanted. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@graph": [
           {
             "@type": "Organization",
-            "@id": "https://getautomiq.com/#org",
+            "@id": "https://app.getautomiq.in/#org",
             "name": "Automiq",
-            "url": "https://getautomiq.com/",
+            "url": "https://app.getautomiq.in/",
+            "logo": "https://app.getautomiq.in/logo.png",
             "description": "Instagram automation platform for creators and businesses.",
             "sameAs": ["https://www.instagram.com/getautomiq"]
           },
           {
             "@type": "WebSite",
-            "@id": "https://getautomiq.com/#website",
-            "url": "https://getautomiq.com/",
+            "@id": "https://app.getautomiq.in/#website",
+            "url": "https://app.getautomiq.in/",
             "name": "Automiq",
-            "publisher": { "@id": "https://getautomiq.com/#org" }
+            "publisher": { "@id": "https://app.getautomiq.in/#org" }
           },
           {
             "@type": "SoftwareApplication",
             "name": "Automiq",
             "applicationCategory": "BusinessApplication",
             "operatingSystem": "Web",
-            "description": "Instagram automation tool that auto-replies to comments, sends DMs, and captures leads on autopilot — comment-to-DM, story replies, keyword automation, CRM and analytics.",
-            "url": "https://getautomiq.com/",
-            "offers": [
-              { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "INR" },
-              { "@type": "Offer", "name": "Starter", "price": "149", "priceCurrency": "INR" },
-              { "@type": "Offer", "name": "Growth", "price": "499", "priceCurrency": "INR" },
-              { "@type": "Offer", "name": "Pro", "price": "999", "priceCurrency": "INR" },
-              { "@type": "Offer", "name": "Agency", "priceCurrency": "INR", "description": "Custom — contact sales" }
-            ],
+            "description": "Automate Instagram DMs, comment replies, lead capture and customer engagement with Automiq.",
+            "url": "https://app.getautomiq.in/",
+            "image": "https://app.getautomiq.in/og-image.png",
+            "publisher": { "@id": "https://app.getautomiq.in/#org" },
             "featureList": [
               "Comment to DM automation",
               "Auto-reply to Instagram comments",

@@ -1,6 +1,15 @@
 import { useEffect } from 'react';
 
-const DEFAULT_TITLE = 'Automiq — Instagram Automation Tool (Comment → DM, Auto-Reply)';
+/**
+ * The one canonical host. Canonical and og:url are built from this rather than
+ * `window.location.origin`, because the same build is reachable on more than one
+ * hostname — using the live origin would emit a different self-referencing
+ * canonical per host and split ranking signals across duplicates.
+ */
+export const SITE_URL = 'https://app.getautomiq.in';
+
+/** Must match the <title> in index.html so the title never flips on unmount. */
+const DEFAULT_TITLE = 'Automiq - Instagram Automation for Creators & Businesses';
 
 /**
  * Lightweight SEO for the SPA: per-page title, meta description, canonical,
@@ -19,7 +28,11 @@ export function useSeo(
 
   useEffect(() => {
     document.title = title;
-    const url = window.location.origin + window.location.pathname;
+    // Always the canonical host + this route's path — never the live origin.
+    // Trailing slash is kept only for the home page, so "/" and "" don't become
+    // two URLs in Google's index.
+    const path = window.location.pathname;
+    const url = SITE_URL + (path === '/' ? '/' : path.replace(/\/$/, ''));
 
     if (description) {
       setMeta('name', 'description', description);
