@@ -54,7 +54,7 @@ export const envSchema = z.object({
   S3_ACCESS_KEY_ID: z.string().optional().default(''),
   S3_SECRET_ACCESS_KEY: z.string().optional().default(''),
 
-  MAIL_FROM: z.string().default('Growasy <no-reply@growasy.app>'),
+  MAIL_FROM: z.string().default('Automiq <hello@getautomiq.online>'),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().optional().default(''),

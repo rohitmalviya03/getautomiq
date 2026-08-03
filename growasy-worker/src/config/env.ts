@@ -35,7 +35,7 @@ export const envSchema = z.object({
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASSWORD: z.string().optional().default(''),
-  MAIL_FROM: z.string().default('Growasy <no-reply@growasy.app>'),
+  MAIL_FROM: z.string().default('Automiq <hello@getautomiq.online>'),
 
   // Base URL of growasy-web, used only for constructing links inside emails
   // if a job payload were ever missing one; the queue contract already sends

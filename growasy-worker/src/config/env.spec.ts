@@ -18,7 +18,7 @@ describe('validateEnv', () => {
     expect(env.REDIS_PORT).toBe(6379);
     expect(env.SMTP_PORT).toBe(1025);
     expect(env.HEALTH_PORT).toBe(4100);
-    expect(env.MAIL_FROM).toBe('Growasy <no-reply@growasy.app>');
+    expect(env.MAIL_FROM).toBe('Automiq <hello@getautomiq.online>');
     expect(env.META_GRAPH_API_VERSION).toBe('v20.0');
     expect(env.INSTAGRAM_GRAPH_BASE).toBe('https://graph.instagram.com');
   });
