@@ -74,13 +74,31 @@ export class CreateAutomationRuleDto {
   @MaxLength(1000)
   replyText?: string;
 
+  /**
+   * @deprecated Use `mediaIds`. Still accepted so older clients keep working;
+   * when both are sent, `mediaIds` wins.
+   */
   @ApiPropertyOptional({
-    description: 'Restrict the rule to comments on one specific media/post id',
+    deprecated: true,
+    description: 'Legacy single-post filter. Prefer mediaIds.',
   })
   @IsOptional()
   @IsString()
   @MaxLength(64)
   mediaId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Restrict the rule to comments on these media/post ids. Empty or omitted ' +
+      'means every post on the account.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  mediaIds?: string[];
 
   @ApiPropertyOptional({ default: 1, minimum: 1, maximum: 50 })
   @IsOptional()

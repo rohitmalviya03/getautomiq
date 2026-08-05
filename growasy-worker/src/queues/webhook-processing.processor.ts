@@ -26,8 +26,23 @@ import {
 type RuleWithTriggers = Prisma.AutomationRuleGetPayload<{ include: { triggers: true } }>;
 
 interface TriggerConfig {
+  /** @deprecated Single-post filter from before multi-post rules. Still in live rows. */
   mediaId?: string;
+  /** Posts the rule is limited to. Empty/absent = every post on the account. */
+  mediaIds?: string[];
   maxDmsPerUserPer24h?: number;
+}
+
+/**
+ * The rule's post filter as a list, accepting either shape. Rules created before
+ * multi-post support store `mediaId` as a single string and are still live, so
+ * both keys must be honoured — ignoring the old one would quietly widen those
+ * rules to fire on every post.
+ */
+function mediaFilterOf(config: TriggerConfig | null | undefined): string[] {
+  if (!config) return [];
+  if (Array.isArray(config.mediaIds) && config.mediaIds.length > 0) return config.mediaIds;
+  return config.mediaId ? [config.mediaId] : [];
 }
 
 /** SEND_DM action config — the lead-capture messages live here. */
@@ -587,8 +602,11 @@ function ruleMatches(rule: RuleWithTriggers, commentText: string, mediaId: strin
   return rule.triggers.some((trigger) => {
     if (trigger.type !== 'COMMENT_KEYWORD') return false;
     const config = parseJson<TriggerConfig>(trigger.config);
-    // Optional per-media filter: only fire on comments on a specific post.
-    if (config?.mediaId && config.mediaId !== mediaId) return false;
+    // Optional per-media filter: only fire on comments on the selected posts.
+    // An empty list means "every post". A rule that names specific posts must
+    // not fire when the webhook carries no media id at all.
+    const allowedMedia = mediaFilterOf(config);
+    if (allowedMedia.length > 0 && (!mediaId || !allowedMedia.includes(mediaId))) return false;
     const keywords = parseJson<string[]>(trigger.keywords) ?? [];
     return matchesKeywords(commentText, trigger.matchType, keywords);
   });

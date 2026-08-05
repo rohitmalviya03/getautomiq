@@ -10,6 +10,34 @@ import { PlanLimitsService } from '../billing/plan-limits.service';
 import { CreateAutomationRuleDto } from './dto/create-automation-rule.dto';
 import { UpdateAutomationRuleDto } from './dto/update-automation-rule.dto';
 
+/** Shape of the JSON in AutomationTrigger.config. */
+interface TriggerConfig {
+  /** @deprecated Single-post filter written by older versions. Read, never written. */
+  mediaId?: string;
+  /** Posts this rule is limited to. Empty/absent = every post on the account. */
+  mediaIds?: string[];
+  maxDmsPerUserPer24h?: number;
+}
+
+/**
+ * The rule's media filter as a list, accepting either shape.
+ *
+ * Rules created before multi-post support carry `mediaId` as a single string,
+ * and they are still live in production — reading both keys is what stops those
+ * automations from silently widening to "all posts" after this change.
+ */
+export function mediaFilterOf(config: TriggerConfig | null | undefined): string[] {
+  if (!config) return [];
+  if (Array.isArray(config.mediaIds) && config.mediaIds.length > 0) return config.mediaIds;
+  return config.mediaId ? [config.mediaId] : [];
+}
+
+/** Trims, drops blanks and de-duplicates a media id list. */
+function normalizeMediaIds(dto: { mediaIds?: string[]; mediaId?: string }): string[] {
+  const raw = dto.mediaIds ?? (dto.mediaId ? [dto.mediaId] : []);
+  return [...new Set(raw.map((id) => id.trim()).filter(Boolean))];
+}
+
 /**
  * CRUD for comment → DM automation rules. A "rule" is stored as an AutomationRule
  * plus one COMMENT_KEYWORD trigger and one/two actions (SEND_DM, optional
@@ -44,7 +72,7 @@ export class AutomationRulesService {
       const triggerTypes: TriggerType[] =
         dto.triggerTypes && dto.triggerTypes.length > 0 ? dto.triggerTypes : ['COMMENT_KEYWORD'];
       const triggerConfig = JSON.stringify({
-        mediaId: dto.mediaId,
+        mediaIds: normalizeMediaIds(dto),
         maxDmsPerUserPer24h: dto.maxDmsPerUserPer24h,
       });
       await tx.automationTrigger.createMany({
@@ -140,19 +168,25 @@ export class AutomationRulesService {
 
       // Keyword/match/config edits apply to ALL of the rule's triggers (they're
       // kept in sync — the trigger types themselves are fixed after creation).
+      const touchesMedia = dto.mediaIds !== undefined || dto.mediaId !== undefined;
       if (
         existing.triggers.length > 0 &&
-        (dto.keywords || dto.matchType || dto.mediaId !== undefined || dto.maxDmsPerUserPer24h)
+        (dto.keywords || dto.matchType || touchesMedia || dto.maxDmsPerUserPer24h)
       ) {
+        // Merge into the current config rather than rebuilding it from the DTO.
+        // These are PATCH semantics: rewriting wholesale meant an edit that only
+        // touched keywords silently cleared the post filter and the DM cap.
+        const current = this.parse<TriggerConfig>(existing.triggers[0]?.config ?? null) ?? {};
+        const nextConfig: TriggerConfig = {
+          mediaIds: touchesMedia ? normalizeMediaIds(dto) : mediaFilterOf(current),
+          maxDmsPerUserPer24h: dto.maxDmsPerUserPer24h ?? current.maxDmsPerUserPer24h,
+        };
         await tx.automationTrigger.updateMany({
           where: { automationRuleId: ruleId },
           data: {
             matchType: dto.matchType ?? undefined,
             keywords: dto.keywords ? JSON.stringify(dto.keywords) : undefined,
-            config: JSON.stringify({
-              mediaId: dto.mediaId,
-              maxDmsPerUserPer24h: dto.maxDmsPerUserPer24h,
-            }),
+            config: JSON.stringify(nextConfig),
           },
         });
       }
@@ -286,7 +320,8 @@ export class AutomationRulesService {
 
   private toView(rule: RuleWithRelations) {
     const trigger = rule.triggers[0];
-    const config = this.parse<{ mediaId?: string; maxDmsPerUserPer24h?: number }>(trigger?.config);
+    const config = this.parse<TriggerConfig>(trigger?.config);
+    const mediaIds = mediaFilterOf(config);
     const dmAction = rule.actions.find((a) => a.type === 'SEND_DM');
     const replyAction = rule.actions.find((a) => a.type === 'REPLY_COMMENT');
     const dmConfig = this.parse<DmConfig>(dmAction?.config ?? null) ?? {};
@@ -303,7 +338,9 @@ export class AutomationRulesService {
       replyText: replyAction
         ? (this.parse<{ text?: string }>(replyAction.config)?.text ?? null)
         : null,
-      mediaId: config?.mediaId ?? null,
+      mediaIds,
+      // Kept so existing clients/analytics that read a single id still work.
+      mediaId: mediaIds[0] ?? null,
       maxDmsPerUserPer24h: config?.maxDmsPerUserPer24h ?? null,
       collectEmail: dmConfig.collectEmail ?? false,
       emailSuccessMessage: dmConfig.emailSuccessMessage ?? null,

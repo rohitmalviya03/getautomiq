@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Bot,
+  Check,
   Film,
   Image as ImageIcon,
   Instagram,
@@ -129,7 +130,7 @@ function toFormValues(rule: AutomationRule): AutomationFormValues {
     keywords: rule.keywords.join(', '),
     dmText: rule.dmText,
     replyText: rule.replyText ?? '',
-    mediaId: rule.mediaId ?? '',
+    mediaIds: rule.mediaIds ?? (rule.mediaId ? [rule.mediaId] : []),
     maxDmsPerUserPer24h: rule.maxDmsPerUserPer24h ? String(rule.maxDmsPerUserPer24h) : '',
     collectEmail: rule.collectEmail ?? false,
     emailSuccessMessage: rule.emailSuccessMessage ?? '',
@@ -155,7 +156,7 @@ function toPayload(values: AutomationFormValues): AutomationRulePayload {
     dmText: values.dmText.trim(),
     // Public reply + per-post filter only apply when a comment trigger is included.
     replyText: hasComment && values.replyText.trim() ? values.replyText.trim() : undefined,
-    mediaId: hasComment && values.mediaId.trim() ? values.mediaId.trim() : undefined,
+    mediaIds: hasComment ? values.mediaIds : [],
     maxDmsPerUserPer24h: values.maxDmsPerUserPer24h
       ? Number(values.maxDmsPerUserPer24h)
       : undefined,
@@ -181,7 +182,7 @@ const EMPTY_FORM: AutomationFormValues = {
   keywords: '',
   dmText: '',
   replyText: '',
-  mediaId: '',
+  mediaIds: [],
   maxDmsPerUserPer24h: '',
   collectEmail: false,
   emailSuccessMessage: '',
@@ -190,10 +191,12 @@ const EMPTY_FORM: AutomationFormValues = {
 };
 
 /**
- * Visual post/reel picker for post-specific automations. Fetches the account's
- * recent media on demand and lets the user click a thumbnail to bind the rule to
- * one post/reel — replacing the old paste-a-media-id field. The selected id is
- * mirrored into a hidden form field by the parent.
+ * Multi-select picker for the posts/reels a rule runs on. Fetches the account's
+ * recent media and lets the user click thumbnails to bind the rule to one or
+ * more posts — replacing the old paste-a-media-id field.
+ *
+ * An empty selection means "every post" — the same semantics the single-select
+ * version had when it was cleared, so nothing changes for existing rules.
  */
 function MediaPicker({
   accountId,
@@ -201,61 +204,85 @@ function MediaPicker({
   onChange,
 }: {
   accountId: string;
-  value: string;
-  onChange: (id: string) => void;
+  value: string[];
+  onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const mediaQuery = useQuery({
     queryKey: ['instagram', 'media', accountId],
     queryFn: () => instagramApi.listMedia(accountId),
-    enabled: open && Boolean(accountId),
+    // Kept mounted once opened so the thumbnails of already-selected posts stay
+    // available after the grid is collapsed.
+    enabled: Boolean(accountId),
     staleTime: 5 * 60 * 1000,
   });
   const media = mediaQuery.data ?? [];
-  const selected = media.find((m) => m.id === value);
+  const selected = value
+    .map((id) => ({ id, m: media.find((x) => x.id === id) }))
+    .filter((s): s is { id: string; m: InstagramMedia | undefined } => Boolean(s.id));
 
   const label = (m: InstagramMedia) =>
     m.mediaProductType === 'REELS' || m.mediaType === 'VIDEO' ? 'Reel' : 'Post';
 
-  if (value) {
-    return (
-      <div className="mt-1 flex items-center gap-3 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
-        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800">
-          {selected?.thumbnailUrl ? (
-            <img
-              src={selected.thumbnailUrl}
-              alt=""
-              referrerPolicy="no-referrer"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-slate-400">
-              <ImageIcon className="h-5 w-5" />
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-slate-700 dark:text-slate-200">
-            {selected?.caption?.trim() || `${selected ? label(selected) : 'Post'} selected`}
-          </p>
-          <p className="truncate text-xs text-slate-400">ID: {value}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onChange('')}
-          className="focus-ring shrink-0 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:text-red-600 dark:text-slate-400"
-        >
-          Clear
-        </button>
-      </div>
-    );
-  }
+  const toggle = (id: string) =>
+    onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
 
   return (
     <div className="mt-1 space-y-2">
+      {selected.length > 0 ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              {selected.length} post{selected.length === 1 ? '' : 's'} selected
+            </p>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="focus-ring rounded-md px-2 py-0.5 text-xs font-medium text-slate-500 hover:text-red-600 dark:text-slate-400"
+            >
+              Clear all
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {selected.map(({ id, m }) => (
+              <span
+                key={id}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 py-1 pl-1 pr-2 dark:border-slate-700"
+              >
+                <span className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-100 dark:bg-slate-800">
+                  {m?.thumbnailUrl ? (
+                    <img
+                      src={m.thumbnailUrl}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-slate-400">
+                      <ImageIcon className="h-4 w-4" />
+                    </span>
+                  )}
+                </span>
+                <span className="max-w-[9rem] truncate text-xs text-slate-600 dark:text-slate-300">
+                  {m?.caption?.trim() || (m ? label(m) : `…${id.slice(-6)}`)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggle(id)}
+                  aria-label="Remove post"
+                  className="focus-ring rounded text-slate-400 hover:text-red-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <Button type="button" variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
         <ImageIcon className="mr-1.5 h-4 w-4" />
-        {open ? 'Hide posts' : 'Choose a post or reel'}
+        {open ? 'Hide posts' : selected.length > 0 ? 'Add more posts' : 'Choose posts or reels'}
       </Button>
 
       {open ? (
@@ -276,16 +303,20 @@ function MediaPicker({
             <p className="p-3 text-sm text-slate-400">No posts found on this account yet.</p>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {media.map((m) => (
+              {media.map((m) => {
+                const isPicked = value.includes(m.id);
+                return (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => {
-                    onChange(m.id);
-                    setOpen(false);
-                  }}
+                  onClick={() => toggle(m.id)}
+                  aria-pressed={isPicked}
                   title={m.caption ?? label(m)}
-                  className="focus-ring group relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
+                  className={`focus-ring group relative aspect-square overflow-hidden rounded-md border bg-slate-100 dark:bg-slate-800 ${
+                    isPicked
+                      ? 'border-brand-500 ring-2 ring-brand-500/40'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
                 >
                   {m.thumbnailUrl ? (
                     <img
@@ -305,8 +336,14 @@ function MediaPicker({
                       <Film className="h-3 w-3" />
                     </span>
                   ) : null}
+                  {isPicked ? (
+                    <span className="brand-gradient absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full text-white shadow">
+                      <Check className="h-3 w-3" />
+                    </span>
+                  ) : null}
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -356,7 +393,7 @@ export function AutomationsPage() {
   const hasComment = triggerTypes.includes('COMMENT_KEYWORD');
   const collectEmail = watch('collectEmail');
   const selectedAccountId = watch('instagramAccountId');
-  const selectedMediaId = watch('mediaId');
+  const selectedMediaIds = watch('mediaIds');
 
   const openCreate = () => {
     reset({ ...EMPTY_FORM, instagramAccountId: connectableAccounts[0]?.id ?? '' });
@@ -367,7 +404,7 @@ export function AutomationsPage() {
       ...EMPTY_FORM,
       ...templateValues,
       instagramAccountId: connectableAccounts[0]?.id ?? '',
-      ...(mediaId ? { mediaId } : {}),
+      ...(mediaId ? { mediaIds: [mediaId] } : {}),
     });
     setEditing('new');
   };
@@ -399,7 +436,7 @@ export function AutomationsPage() {
       ...EMPTY_FORM,
       ...(tpl?.values ?? { triggerTypes: ['COMMENT_KEYWORD'], keywords: 'link, info' }),
       instagramAccountId: resolvedAccount,
-      ...(mediaId ? { mediaId } : {}),
+      ...(mediaId ? { mediaIds: [mediaId] } : {}),
     });
     setEditing('new');
     setSearchParams({}, { replace: true });
@@ -738,18 +775,17 @@ export function AutomationsPage() {
 
                 {hasComment ? (
                   <div>
-                    <Label htmlFor="mediaId">Run only on a specific post or reel (optional)</Label>
-                    {/* keep the raw id in the form; the picker drives it visually */}
-                    <input type="hidden" {...register('mediaId')} />
+                    <Label htmlFor="mediaIds">Run only on specific posts or reels (optional)</Label>
                     <MediaPicker
                       accountId={selectedAccountId}
-                      value={selectedMediaId}
-                      onChange={(id) => setValue('mediaId', id, { shouldDirty: true })}
+                      value={selectedMediaIds}
+                      onChange={(ids) => setValue('mediaIds', ids, { shouldDirty: true })}
                     />
                     <p className="mt-1 text-xs text-slate-400">
-                      Leave unset to run on comments across all your posts.
+                      Pick as many as you like — the same automation runs on all of them. Leave
+                      empty to run on comments across every post.
                     </p>
-                    <FieldError message={errors.mediaId?.message} />
+                    <FieldError message={errors.mediaIds?.message} />
                   </div>
                 ) : null}
 

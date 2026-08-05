@@ -169,6 +169,63 @@ describe('processWebhookComment', () => {
     );
   });
 
+  // --- per-post targeting -----------------------------------------------------
+  // A rule may name several posts (config.mediaIds). Rules written before that
+  // existed carry a single config.mediaId and are still live in production, so
+  // both shapes have to keep working.
+
+  /** Comment rule limited to the given posts, in either config shape. */
+  function scopedRule(config: Record<string, unknown>) {
+    return {
+      id: 'rule-1',
+      priority: 0,
+      triggers: [
+        {
+          type: 'COMMENT_KEYWORD',
+          matchType: 'CONTAINS',
+          keywords: JSON.stringify(['price']),
+          config: JSON.stringify(config),
+        },
+      ],
+    };
+  }
+
+  async function matchedAgainst(config: Record<string, unknown>, mediaId: string | null) {
+    const prisma = makePrisma({
+      automationRule: { findMany: vi.fn().mockResolvedValue([scopedRule(config)]) },
+    });
+    const automationQueue = makeQueue();
+    await processWebhookComment({ ...BASE_JOB, mediaId: mediaId ?? undefined }, deps(prisma, automationQueue));
+    return (automationQueue.add as ReturnType<typeof vi.fn>).mock.calls.length > 0;
+  }
+
+  it('fires on any post when no media filter is set', async () => {
+    expect(await matchedAgainst({}, 'm-9')).toBe(true);
+  });
+
+  it('fires on every post listed in mediaIds', async () => {
+    const config = { mediaIds: ['m-1', 'm-2', 'm-3'] };
+    expect(await matchedAgainst(config, 'm-1')).toBe(true);
+    expect(await matchedAgainst(config, 'm-3')).toBe(true);
+  });
+
+  it('does not fire on a post outside mediaIds', async () => {
+    expect(await matchedAgainst({ mediaIds: ['m-1', 'm-2'] }, 'm-99')).toBe(false);
+  });
+
+  it('still honours the legacy single mediaId config', async () => {
+    expect(await matchedAgainst({ mediaId: 'm-1' }, 'm-1')).toBe(true);
+    expect(await matchedAgainst({ mediaId: 'm-1' }, 'm-2')).toBe(false);
+  });
+
+  it('treats an empty mediaIds list as "every post"', async () => {
+    expect(await matchedAgainst({ mediaIds: [] }, 'm-7')).toBe(true);
+  });
+
+  it('does not fire a post-scoped rule when the event carries no media id', async () => {
+    expect(await matchedAgainst({ mediaIds: ['m-1'] }, null)).toBe(false);
+  });
+
   it('skips accounts that are not CONNECTED', async () => {
     const prisma = makePrisma({
       instagramAccount: {

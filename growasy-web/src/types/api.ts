@@ -153,6 +153,9 @@ export interface AutomationRule {
   keywords: string[];
   dmText: string;
   replyText: string | null;
+  /** Posts the rule is limited to. Empty = every post on the account. */
+  mediaIds: string[];
+  /** @deprecated First entry of `mediaIds`, kept for older callers. */
   mediaId: string | null;
   maxDmsPerUserPer24h: number | null;
   /** Lead-capture flow: parse the contact's next DM reply as an email. */
@@ -204,7 +207,7 @@ export interface AutomationRulePayload {
   keywords: string[];
   dmText: string;
   replyText?: string;
-  mediaId?: string;
+  mediaIds?: string[];
   maxDmsPerUserPer24h?: number;
   collectEmail?: boolean;
   emailSuccessMessage?: string;

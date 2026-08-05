@@ -36,11 +36,13 @@ export function ContentPage() {
   });
   const rulesQuery = useQuery({ queryKey: ['automations', 'rules'], queryFn: () => automationsApi.list() });
 
-  // How many automations already target each post/reel (by mediaId).
+  // How many automations already target each post/reel. A rule can now name
+  // several posts, so it counts once against every post it targets.
   const rulesByMedia = useMemo(() => {
     const map = new Map<string, number>();
     for (const rule of rulesQuery.data ?? []) {
-      if (rule.mediaId) map.set(rule.mediaId, (map.get(rule.mediaId) ?? 0) + 1);
+      const targets = rule.mediaIds?.length ? rule.mediaIds : rule.mediaId ? [rule.mediaId] : [];
+      for (const id of targets) map.set(id, (map.get(id) ?? 0) + 1);
     }
     return map;
   }, [rulesQuery.data]);

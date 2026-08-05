@@ -17,7 +17,8 @@ export const automationRuleSchema = z
     keywords: z.string().max(2000).optional().default(''),
     dmText: z.string().min(1, 'Write the DM to send').max(1000),
     replyText: z.string().max(1000).optional().default(''),
-    mediaId: z.string().max(64).optional().default(''),
+    /** Posts/reels the rule is limited to. Empty = every post on the account. */
+    mediaIds: z.array(z.string().max(64)).max(100).optional().default([]),
     collectEmail: z.boolean().optional().default(false),
     emailSuccessMessage: z.string().max(1000).optional().default(''),
     emailFailureMessage: z.string().max(1000).optional().default(''),
