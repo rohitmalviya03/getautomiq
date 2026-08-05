@@ -1,5 +1,12 @@
 import { apiClient } from '@/lib/api-client';
 import type { ServerPlan } from '@/lib/pricing-api';
+import type {
+  Ticket,
+  TicketDetail,
+  TicketMessage,
+  TicketPriority,
+  TicketStatus,
+} from '@/lib/support-api';
 
 export interface AdminOverview {
   totals: {
@@ -281,6 +288,27 @@ export const adminApi = {
     apiClient.patch<unknown>(`/admin/plans/${id}`, body),
 
   // ---- Coupons --------------------------------------------------------------
+  // ---- Support tickets ------------------------------------------------------
+  tickets: (params: { status?: string; category?: string; search?: string; page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.category) q.set('category', params.category);
+    if (params.search) q.set('search', params.search);
+    if (params.page) q.set('page', String(params.page));
+    if (params.pageSize) q.set('pageSize', String(params.pageSize));
+    const s = q.toString();
+    return apiClient.get<Paginated<Ticket> & { openCount: number }>(
+      `/admin/tickets${s ? `?${s}` : ''}`,
+    );
+  },
+  ticket: (id: string) => apiClient.get<TicketDetail>(`/admin/tickets/${id}`),
+  replyTicket: (id: string, message: string, isInternal = false) =>
+    apiClient.post<TicketMessage>(`/admin/tickets/${id}/reply`, { message, isInternal }),
+  updateTicket: (
+    id: string,
+    body: { status?: TicketStatus; priority?: TicketPriority; assignedToUserId?: string },
+  ) => apiClient.patch<Ticket>(`/admin/tickets/${id}`, body),
+
   coupons: () => apiClient.get<AdminCoupon[]>('/admin/coupons'),
   createCoupon: (body: UpsertCouponInput) => apiClient.post<AdminCoupon>('/admin/coupons', body),
   updateCoupon: (id: string, body: UpsertCouponInput) =>

@@ -19,6 +19,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { LinksModule } from './modules/links/links.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
+import { SupportModule } from './modules/support/support.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './modules/health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -61,6 +62,7 @@ import { FeatureGuard } from './common/guards/feature.guard';
     LinksModule,
     NotificationsModule,
     WorkflowsModule,
+    SupportModule,
     AdminModule,
   ],
   providers: [

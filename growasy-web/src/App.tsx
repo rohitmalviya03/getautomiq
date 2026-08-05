@@ -32,6 +32,8 @@ import { AdminOverviewPage } from '@/pages/admin/AdminOverviewPage';
 import { AdminCustomersPage } from '@/pages/admin/AdminCustomersPage';
 import { AdminCustomerDetailPage } from '@/pages/admin/AdminCustomerDetailPage';
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
+import { HelpCenterPage } from '@/pages/dashboard/HelpCenterPage';
+import { AdminTicketsPage } from '@/pages/admin/AdminTicketsPage';
 import { AdminPricingPage } from '@/pages/admin/AdminPricingPage';
 import { AdminCouponsPage } from '@/pages/admin/AdminCouponsPage';
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
@@ -121,6 +123,7 @@ export function App() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/links" element={<LinksPage />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/help" element={<HelpCenterPage />} />
           {/* META_REDIRECT_URI points at exactly this path — do not rename. */}
           <Route path="/settings/instagram/callback" element={<InstagramCallbackPage />} />
           <Route path="/settings" element={<ProfilePage />} />
@@ -135,6 +138,7 @@ export function App() {
           <Route path="/admin" element={<AdminOverviewPage />} />
           <Route path="/admin/customers" element={<AdminCustomersPage />} />
           <Route path="/admin/customers/:id" element={<AdminCustomerDetailPage />} />
+          <Route path="/admin/tickets" element={<AdminTicketsPage />} />
           <Route path="/admin/pricing" element={<AdminPricingPage />} />
           <Route path="/admin/coupons" element={<AdminCouponsPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />

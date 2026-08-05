@@ -30,6 +30,12 @@ import {
 } from './dto/admin.dto';
 import { UpdatePlanDto, UpsertCouponDto } from './dto/pricing.dto';
 import { AdminPricingService } from './admin-pricing.service';
+import { AdminSupportService } from './admin-support.service';
+import {
+  AdminReplyTicketDto,
+  TicketListQueryDto,
+  UpdateTicketDto,
+} from '../support/dto/support.dto';
 
 /**
  * Platform-owner back office. Every route sits behind the global JwtAuthGuard AND
@@ -45,6 +51,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly auth: AuthService,
     private readonly pricing: AdminPricingService,
+    private readonly tickets: AdminSupportService,
   ) {}
 
   private meta(req: Request) {
@@ -281,6 +288,39 @@ export class AdminController {
   @Get('coupons/:id/redemptions')
   couponRedemptions(@Param('id') id: string) {
     return this.pricing.couponRedemptions(id);
+  }
+
+  // --- Support tickets -------------------------------------------------------
+
+  @Get('tickets')
+  listTickets(@Query() query: TicketListQueryDto) {
+    return this.tickets.list(query);
+  }
+
+  @Get('tickets/:id')
+  ticketDetail(@Param('id') id: string) {
+    return this.tickets.detail(id);
+  }
+
+  /** Public reply, or an internal note the customer never sees. */
+  @Post('tickets/:id/reply')
+  @HttpCode(HttpStatus.CREATED)
+  replyTicket(
+    @Param('id') id: string,
+    @Body() dto: AdminReplyTicketDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.tickets.reply(id, dto, actor);
+  }
+
+  @Patch('tickets/:id')
+  updateTicket(
+    @Param('id') id: string,
+    @Body() dto: UpdateTicketDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.tickets.update(id, dto, actor, this.meta(req));
   }
 
   // --- Audit -----------------------------------------------------------------

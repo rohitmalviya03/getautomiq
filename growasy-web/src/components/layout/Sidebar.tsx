@@ -13,6 +13,7 @@ import {
   UserCog,
   MonitorSmartphone,
   Building2,
+  LifeBuoy,
   ShieldCheck,
 } from 'lucide-react';
 import { organizationsApi } from '@/lib/organizations-api';
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Profile & Settings', icon: UserCog, end: false },
   { to: '/sessions', label: 'Sessions & Devices', icon: MonitorSmartphone, end: false },
   { to: '/organization', label: 'Organization', icon: Building2, end: false },
+  { to: '/help', label: 'Help centre', icon: LifeBuoy, end: false },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

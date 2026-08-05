@@ -249,6 +249,16 @@ enum SupportTicketStatus {
   CLOSED
 }
 
+/// Coarse bucket chosen by the requester, so the queue can be triaged at a glance.
+enum SupportCategory {
+  BILLING
+  INSTAGRAM_CONNECTION
+  AUTOMATIONS
+  BUG
+  FEATURE_REQUEST
+  OTHER
+}
+
 enum SupportTicketPriority {
   LOW
   MEDIUM
@@ -1226,8 +1236,16 @@ model SupportTicket {
   createdByUserId  String                @db.Char(36)
   assignedToUserId String?               @db.Char(36)
   subject          String                @db.VarChar(255)
+  category         SupportCategory       @default(OTHER)
   status           SupportTicketStatus   @default(OPEN)
   priority         SupportTicketPriority @default(MEDIUM)
+  // How the customer wants to be reached. Captured per ticket rather than read
+  // off the account, because the person raising it often wants a reply on a
+  // different address or a phone number.
+  contactEmail     String?               @db.VarChar(255)
+  contactPhone     String?               @db.VarChar(32)
+  /// Set when the requester last added a message — powers the "waiting on us" view.
+  lastCustomerReplyAt DateTime?
   closedAt         DateTime?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
