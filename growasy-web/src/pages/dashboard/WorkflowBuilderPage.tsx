@@ -298,6 +298,61 @@ export function WorkflowBuilderPage() {
 const INPUT_CLS =
   'focus-ring w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
 
+/** "a, b" → ["a","b"]. Blank entries are dropped so a trailing comma is harmless. */
+function parseKeywords(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Comma-separated keyword editor.
+ *
+ * Keeps the raw text in local state instead of deriving it from the saved array.
+ * Deriving it made the comma impossible to type: "guide," parses to ["guide"]
+ * (the empty tail is filtered out), which re-renders as "guide" — deleting the
+ * character the moment it was entered. The parsed array is still what goes
+ * upstream, so what gets saved is unchanged.
+ */
+export function KeywordsInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  value: string[];
+  onChange: (keywords: string[]) => void;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState(() => value.join(', '));
+  // Joined on NUL so the effect keys off the list contents rather than a fresh
+  // array identity each render. NUL — not a comma or a space — because a keyword
+  // may legitimately contain either: "free guide" has to stay one keyword.
+  const joined = value.join('\u0000');
+
+  useEffect(() => {
+    setText((prev) =>
+      parseKeywords(prev).join('\u0000') === joined
+        ? prev
+        : joined.split('\u0000').filter(Boolean).join(', '),
+    );
+  }, [joined]);
+
+  return (
+    <Input
+      id={id}
+      value={text}
+      placeholder={placeholder}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(parseKeywords(e.target.value));
+      }}
+    />
+  );
+}
+
 function NodeConfigBody({ node, onChange }: { node: WFNode; onChange: (patch: Record<string, unknown>) => void }) {
   const c = node.config as Record<string, unknown>;
 
@@ -359,10 +414,10 @@ function NodeConfigBody({ node, onChange }: { node: WFNode; onChange: (patch: Re
         </div>
         <div>
           <Label htmlFor="ckw">Keywords (comma-separated)</Label>
-          <Input
+          <KeywordsInput
             id="ckw"
-            value={((c.keywords as string[]) ?? []).join(', ')}
-            onChange={(e) => onChange({ keywords: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+            value={(c.keywords as string[]) ?? []}
+            onChange={(keywords) => onChange({ keywords })}
             placeholder="yes, sure, ok"
           />
         </div>
@@ -473,12 +528,10 @@ function TriggerConfig({ node, onChange }: { node: WFNode; onChange: (patch: Rec
       {cfg.matchType !== 'ANY' ? (
         <div>
           <Label htmlFor="kw">Keywords (comma-separated)</Label>
-          <Input
+          <KeywordsInput
             id="kw"
-            value={(cfg.keywords ?? []).join(', ')}
-            onChange={(e) =>
-              onChange({ keywords: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })
-            }
+            value={cfg.keywords ?? []}
+            onChange={(keywords) => onChange({ keywords })}
             placeholder="price, info, link"
           />
         </div>
