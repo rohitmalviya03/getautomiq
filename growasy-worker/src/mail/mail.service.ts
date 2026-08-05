@@ -3,6 +3,8 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import type { EnvConfig } from '../config/env';
 import { logger } from '../logger/logger';
 import { passwordResetEmailTemplate } from './templates/password-reset-email.template';
+import { planExpiredEmailTemplate } from './templates/plan-expired-email.template';
+import { planExpiringEmailTemplate } from './templates/plan-expiring-email.template';
 import { verificationEmailTemplate } from './templates/verification-email.template';
 import { welcomeEmailTemplate } from './templates/welcome-email.template';
 
@@ -14,11 +16,17 @@ import { welcomeEmailTemplate } from './templates/welcome-email.template';
 export class MailService {
   private readonly transporter: Transporter;
   private readonly from: string;
+  /** Base URL used to build the CTA links inside emails. */
+  private readonly appUrl: string;
 
   constructor(
-    env: Pick<EnvConfig, 'SMTP_HOST' | 'SMTP_PORT' | 'SMTP_USER' | 'SMTP_PASSWORD' | 'MAIL_FROM'>,
+    env: Pick<
+      EnvConfig,
+      'SMTP_HOST' | 'SMTP_PORT' | 'SMTP_USER' | 'SMTP_PASSWORD' | 'MAIL_FROM' | 'WEB_APP_URL'
+    >,
   ) {
     this.from = env.MAIL_FROM;
+    this.appUrl = env.WEB_APP_URL.replace(/\/$/, '');
     this.transporter = nodemailer.createTransport({
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,
@@ -48,7 +56,27 @@ export class MailService {
   }
 
   async sendWelcomeEmail(payload: { toEmail: string; firstName: string }): Promise<void> {
-    const { subject, html, text } = welcomeEmailTemplate(payload);
+    const { subject, html, text } = welcomeEmailTemplate({ ...payload, appUrl: this.appUrl });
+    await this.deliver(payload.toEmail, subject, html, text);
+  }
+
+  async sendPlanExpiringEmail(payload: {
+    toEmail: string;
+    firstName: string;
+    planName: string;
+    endsAt: string;
+    daysLeft: number;
+  }): Promise<void> {
+    const { subject, html, text } = planExpiringEmailTemplate({ ...payload, appUrl: this.appUrl });
+    await this.deliver(payload.toEmail, subject, html, text);
+  }
+
+  async sendPlanExpiredEmail(payload: {
+    toEmail: string;
+    firstName: string;
+    planName: string;
+  }): Promise<void> {
+    const { subject, html, text } = planExpiredEmailTemplate({ ...payload, appUrl: this.appUrl });
     await this.deliver(payload.toEmail, subject, html, text);
   }
 

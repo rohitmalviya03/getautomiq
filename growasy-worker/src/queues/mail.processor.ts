@@ -6,6 +6,8 @@ import {
   MAIL_JOB_NAMES,
   QUEUE_NAMES,
   type SendPasswordResetEmailJob,
+  type SendPlanExpiredEmailJob,
+  type SendPlanExpiringEmailJob,
   type SendVerificationEmailJob,
   type SendWelcomeEmailJob,
 } from './queue-names.constant';
@@ -31,6 +33,16 @@ export async function dispatchMailJob(job: Job, mailService: MailService): Promi
     case MAIL_JOB_NAMES.SEND_WELCOME_EMAIL: {
       const data = job.data as SendWelcomeEmailJob;
       await mailService.sendWelcomeEmail(data);
+      return;
+    }
+    case MAIL_JOB_NAMES.SEND_PLAN_EXPIRING_EMAIL: {
+      const data = job.data as SendPlanExpiringEmailJob;
+      await mailService.sendPlanExpiringEmail(data);
+      return;
+    }
+    case MAIL_JOB_NAMES.SEND_PLAN_EXPIRED_EMAIL: {
+      const data = job.data as SendPlanExpiredEmailJob;
+      await mailService.sendPlanExpiredEmail(data);
       return;
     }
     default: {

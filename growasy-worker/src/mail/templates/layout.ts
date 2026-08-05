@@ -53,7 +53,7 @@ export function renderLayout(options: {
             <tr>
               <td style="background-color:#111827;padding:24px 32px;">
                 <span style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:bold;">
-                  Growasy
+                  Automiq
                 </span>
               </td>
             </tr>
@@ -71,7 +71,7 @@ export function renderLayout(options: {
             <tr>
               <td style="padding:24px 32px 32px;border-top:1px solid #e5e7eb;">
                 <p style="margin:16px 0 0;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;">
-                  You're receiving this email because of activity on your Growasy account.
+                  You're receiving this email because of activity on your Automiq account.
                   If you didn't expect this, you can safely ignore it.
                 </p>
               </td>

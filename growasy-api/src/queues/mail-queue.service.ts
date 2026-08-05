@@ -5,6 +5,8 @@ import {
   MAIL_JOB_NAMES,
   QUEUE_NAMES,
   SendPasswordResetEmailJob,
+  SendPlanExpiredEmailJob,
+  SendPlanExpiringEmailJob,
   SendVerificationEmailJob,
   SendWelcomeEmailJob,
 } from './queue-names.constant';
@@ -43,6 +45,23 @@ export class MailQueueService implements OnModuleDestroy {
 
   async sendWelcomeEmail(payload: SendWelcomeEmailJob) {
     await this.queue.add(MAIL_JOB_NAMES.SEND_WELCOME_EMAIL, payload);
+  }
+
+  /**
+   * Plan-lifecycle mail. The `jobId` is deliberately deterministic — it includes
+   * the subscription and the period it refers to, so the daily cron re-enqueuing
+   * the same reminder is a no-op in BullMQ rather than a duplicate email.
+   */
+  async sendPlanExpiringEmail(payload: SendPlanExpiringEmailJob, dedupeKey: string) {
+    await this.queue.add(MAIL_JOB_NAMES.SEND_PLAN_EXPIRING_EMAIL, payload, {
+      jobId: `plan-expiring-${dedupeKey}`,
+    });
+  }
+
+  async sendPlanExpiredEmail(payload: SendPlanExpiredEmailJob, dedupeKey: string) {
+    await this.queue.add(MAIL_JOB_NAMES.SEND_PLAN_EXPIRED_EMAIL, payload, {
+      jobId: `plan-expired-${dedupeKey}`,
+    });
   }
 
   async onModuleDestroy() {

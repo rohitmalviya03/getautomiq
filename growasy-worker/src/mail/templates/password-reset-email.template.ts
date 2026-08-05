@@ -7,15 +7,15 @@ export function passwordResetEmailTemplate(options: {
   resetUrl: string;
 }): EmailContent {
   const { firstName, resetUrl } = options;
-  const subject = 'Reset your Growasy password';
+  const subject = 'Reset your Automiq password';
 
   const html = renderLayout({
-    preheader: 'Use this link to reset your Growasy password.',
+    preheader: 'Use this link to reset your Automiq password.',
     heading: 'Reset your password',
     bodyHtml: `
       <p style="margin:0 0 16px;">Hi ${escapeHtml(firstName)},</p>
       <p style="margin:0;">
-        We received a request to reset the password for your Growasy account.
+        We received a request to reset the password for your Automiq account.
         Click the button below to choose a new password. This link expires in 60 minutes.
       </p>
     `,
@@ -26,7 +26,7 @@ export function passwordResetEmailTemplate(options: {
   const text = [
     `Hi ${firstName},`,
     '',
-    'We received a request to reset the password for your Growasy account. Visit the link below to choose a new password. This link expires in 60 minutes.',
+    'We received a request to reset the password for your Automiq account. Visit the link below to choose a new password. This link expires in 60 minutes.',
     '',
     resetUrl,
     '',

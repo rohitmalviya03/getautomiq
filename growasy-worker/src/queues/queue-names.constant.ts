@@ -30,6 +30,8 @@ export const MAIL_JOB_NAMES = {
   SEND_VERIFICATION_EMAIL: 'send-verification-email',
   SEND_PASSWORD_RESET_EMAIL: 'send-password-reset-email',
   SEND_WELCOME_EMAIL: 'send-welcome-email',
+  SEND_PLAN_EXPIRING_EMAIL: 'send-plan-expiring-email',
+  SEND_PLAN_EXPIRED_EMAIL: 'send-plan-expired-email',
 } as const;
 
 export interface SendVerificationEmailJob {
@@ -47,6 +49,23 @@ export interface SendPasswordResetEmailJob {
 export interface SendWelcomeEmailJob {
   toEmail: string;
   firstName: string;
+}
+
+/** Heads-up a few days before a non-renewing plan lapses. */
+export interface SendPlanExpiringEmailJob {
+  toEmail: string;
+  firstName: string;
+  planName: string;
+  /** End date, pre-formatted by the producer so both sides agree on the wording. */
+  endsAt: string;
+  daysLeft: number;
+}
+
+/** Sent once, on the day the plan actually lapses to Free. */
+export interface SendPlanExpiredEmailJob {
+  toEmail: string;
+  firstName: string;
+  planName: string;
 }
 
 // ---------------------------------------------------------------------------

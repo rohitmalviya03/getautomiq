@@ -195,7 +195,7 @@ describe('processWebhookComment', () => {
       automationRule: { findMany: vi.fn().mockResolvedValue([scopedRule(config)]) },
     });
     const automationQueue = makeQueue();
-    await processWebhookComment({ ...BASE_JOB, mediaId: mediaId ?? undefined }, deps(prisma, automationQueue));
+    await processWebhookComment({ ...BASE_JOB, mediaId }, deps(prisma, automationQueue));
     return (automationQueue.add as ReturnType<typeof vi.fn>).mock.calls.length > 0;
   }
 

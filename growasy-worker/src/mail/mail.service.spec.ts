@@ -17,7 +17,8 @@ const baseEnv = {
   SMTP_PORT: 1025,
   SMTP_USER: '',
   SMTP_PASSWORD: '',
-  MAIL_FROM: 'Growasy <no-reply@growasy.app>',
+  MAIL_FROM: 'Automiq <hello@getautomiq.online>',
+  WEB_APP_URL: 'https://app.getautomiq.in',
 };
 
 describe('MailService', () => {

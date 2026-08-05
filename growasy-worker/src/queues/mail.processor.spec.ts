@@ -14,6 +14,8 @@ function fakeMailService(): MailService {
     sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
     sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
     sendWelcomeEmail: vi.fn().mockResolvedValue(undefined),
+    sendPlanExpiringEmail: vi.fn().mockResolvedValue(undefined),
+    sendPlanExpiredEmail: vi.fn().mockResolvedValue(undefined),
   } as unknown as MailService;
 }
 
@@ -69,6 +71,32 @@ describe('dispatchMailJob', () => {
     expect(mailService.sendVerificationEmail).not.toHaveBeenCalled();
     expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
     expect(mailService.sendWelcomeEmail).not.toHaveBeenCalled();
+  });
+
+  it('dispatches send-plan-expiring-email jobs to mailService.sendPlanExpiringEmail', async () => {
+    const mailService = fakeMailService();
+    const payload = {
+      toEmail: 'jane@example.com',
+      firstName: 'Jane',
+      planName: 'Growth',
+      endsAt: '8 August 2026',
+      daysLeft: 3,
+    };
+
+    await dispatchMailJob(fakeJob(MAIL_JOB_NAMES.SEND_PLAN_EXPIRING_EMAIL, payload), mailService);
+
+    expect(mailService.sendPlanExpiringEmail).toHaveBeenCalledWith(payload);
+    expect(mailService.sendPlanExpiredEmail).not.toHaveBeenCalled();
+  });
+
+  it('dispatches send-plan-expired-email jobs to mailService.sendPlanExpiredEmail', async () => {
+    const mailService = fakeMailService();
+    const payload = { toEmail: 'jane@example.com', firstName: 'Jane', planName: 'Growth' };
+
+    await dispatchMailJob(fakeJob(MAIL_JOB_NAMES.SEND_PLAN_EXPIRED_EMAIL, payload), mailService);
+
+    expect(mailService.sendPlanExpiredEmail).toHaveBeenCalledWith(payload);
+    expect(mailService.sendPlanExpiringEmail).not.toHaveBeenCalled();
   });
 
   it('propagates errors thrown by the mail service so BullMQ retries the job', async () => {
