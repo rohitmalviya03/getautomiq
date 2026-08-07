@@ -5,21 +5,40 @@ const REQUEST_TIMEOUT_MS = 15_000;
 /** Meta OAuth error code for an invalid/expired/revoked access token. */
 const AUTH_ERROR_CODE = 190;
 
+/**
+ * Meta's throttling codes.
+ *   4     application-level rate limit
+ *   17    user-level rate limit
+ *   32    page-level rate limit
+ *   613   calls-per-second limit
+ *   80007 messaging rate limit (Instagram)
+ * Retrying these immediately just deepens the throttle, so callers back off.
+ */
+const RATE_LIMIT_CODES = new Set([4, 17, 32, 613, 80007]);
+
+/** Used when Meta throttles without telling us for how long. */
+const DEFAULT_RATE_LIMIT_BACKOFF_MS = 60_000;
+const MAX_RATE_LIMIT_BACKOFF_MS = 15 * 60_000;
+
 interface GraphErrorBody {
   error?: { message?: string; type?: string; code?: number; error_subcode?: number };
 }
 
 /**
- * Raised when the Instagram Graph API returns an error. `isAuthError` singles
- * out the dead-token case (code 190) so the caller can flip the account to
- * NEEDS_RECONNECT and stop retrying instead of hammering a token that will
- * never work again.
+ * Raised when the Instagram Graph API returns an error.
+ *
+ * `isAuthError` singles out the dead-token case (code 190) so the caller can flip
+ * the account to NEEDS_RECONNECT and stop retrying instead of hammering a token
+ * that will never work again. `isRateLimited` marks the throttling codes, where
+ * the right move is the opposite: keep the job, wait, and try again later.
  */
 export class InstagramApiError extends Error {
   constructor(
     message: string,
     readonly graphCode?: number,
     readonly httpStatus?: number,
+    /** From the Retry-After header, when Meta sends one. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'InstagramApiError';
@@ -28,6 +47,25 @@ export class InstagramApiError extends Error {
   get isAuthError(): boolean {
     return this.graphCode === AUTH_ERROR_CODE || this.httpStatus === 401;
   }
+
+  get isRateLimited(): boolean {
+    return this.httpStatus === 429 || (this.graphCode !== undefined && RATE_LIMIT_CODES.has(this.graphCode));
+  }
+
+  /** How long to hold off for — Meta's hint when given, else a sane default. */
+  get backoffMs(): number {
+    return Math.min(this.retryAfterMs ?? DEFAULT_RATE_LIMIT_BACKOFF_MS, MAX_RATE_LIMIT_BACKOFF_MS);
+  }
+}
+
+/** `Retry-After` is seconds or an HTTP date; both are worth honouring. */
+function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(header);
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  return undefined;
 }
 
 export interface MetaGraphClientOptions {
@@ -135,11 +173,22 @@ export class MetaGraphClient {
     if (!response.ok || parsed.error) {
       const code = parsed.error?.code;
       const message = parsed.error?.message ?? `Instagram API error (HTTP ${response.status})`;
+      const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+      const error = new InstagramApiError(message, code, response.status, retryAfterMs);
       logger.warn(
-        { httpStatus: response.status, graphCode: code, message },
+        {
+          httpStatus: response.status,
+          graphCode: code,
+          message,
+          rateLimited: error.isRateLimited,
+          retryAfterMs,
+          // Meta reports remaining quota here; invaluable when diagnosing a throttle.
+          appUsage: response.headers.get('x-app-usage') ?? undefined,
+          businessUsage: response.headers.get('x-business-use-case-usage') ?? undefined,
+        },
         'instagram graph api error',
       );
-      throw new InstagramApiError(message, code, response.status);
+      throw error;
     }
 
     return parsed;

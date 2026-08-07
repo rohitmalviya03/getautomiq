@@ -182,10 +182,26 @@ export function createWorkflowExecutionWorker(options: {
   concurrency?: number;
 }): Worker {
   const { connection, deps, queue, concurrency = 5 } = options;
-  const worker = new Worker(
+  const worker: Worker = new Worker(
     QUEUE_NAMES.WORKFLOW_EXECUTION,
     async (job: Job<RunWorkflowJob>) => {
-      await runWorkflow(job.data, deps, queue);
+      try {
+        await runWorkflow(job.data, deps, queue);
+      } catch (error) {
+        // Same treatment as the automation worker: a Meta throttle pauses this
+        // worker and requeues the run without burning a retry attempt, instead
+        // of hammering the API and losing the run.
+        if (error instanceof InstagramApiError && error.isRateLimited) {
+          const waitMs = error.backoffMs;
+          logger.warn(
+            { stage: 'workflow', jobId: job.id, graphCode: error.graphCode, waitMs },
+            'instagram rate limited — pausing workflow-execution worker',
+          );
+          await worker.rateLimit(waitMs);
+          throw Worker.RateLimitError();
+        }
+        throw error;
+      }
     },
     { connection, concurrency },
   );
@@ -466,6 +482,10 @@ async function sendWorkflowDm(
       await prisma.instagramAccount.update({ where: { id: account.id }, data: { status: 'NEEDS_RECONNECT' } });
       return { ok: false, outcome: 'needs_reconnect' };
     }
+    // A throttle is temporary, so it must NOT be swallowed as send_failed —
+    // that would abandon the run. Rethrow it for the worker, which pauses and
+    // requeues. Every other failure keeps its existing behaviour.
+    if (error instanceof InstagramApiError && error.isRateLimited) throw error;
     return { ok: false, outcome: 'send_failed' };
   }
 

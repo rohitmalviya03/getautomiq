@@ -350,13 +350,31 @@ export function createAutomationExecutionWorker(options: {
 }): Worker {
   const { connection, deps, concurrency = 5 } = options;
 
-  const worker = new Worker(
+  const worker: Worker = new Worker(
     QUEUE_NAMES.AUTOMATION_EXECUTION,
     async (job: Job) => {
-      if (job.name === AUTOMATION_JOB_NAMES.SEND_LEAD_REPLY) {
-        await processSendLeadReply(job.data as SendLeadReplyJob, deps);
-      } else {
-        await processAutomationExecution(job.data as ExecuteAutomationJob, deps);
+      try {
+        if (job.name === AUTOMATION_JOB_NAMES.SEND_LEAD_REPLY) {
+          await processSendLeadReply(job.data as SendLeadReplyJob, deps);
+        } else {
+          await processAutomationExecution(job.data as ExecuteAutomationJob, deps);
+        }
+      } catch (error) {
+        // Meta throttling is not a job failure — retrying it immediately (or
+        // burning the 4 attempts on exponential backoff) just deepens the
+        // throttle and drops real DMs during a spike. Pause the whole worker for
+        // as long as Meta asked, then let BullMQ requeue this job WITHOUT
+        // counting an attempt, which is what RateLimitError signals.
+        if (error instanceof InstagramApiError && error.isRateLimited) {
+          const waitMs = error.backoffMs;
+          logger.warn(
+            { jobId: job.id, graphCode: error.graphCode, waitMs },
+            'instagram rate limited — pausing automation-execution worker',
+          );
+          await worker.rateLimit(waitMs);
+          throw Worker.RateLimitError();
+        }
+        throw error;
       }
     },
     { connection, concurrency },
