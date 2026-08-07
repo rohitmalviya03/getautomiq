@@ -127,18 +127,6 @@
     </script>
   </head>
   <body>
-    <!--
-      Netlify Forms detection stub. Netlify scans the built HTML at deploy time
-      to register forms; a React SPA renders its form at runtime, so this hidden
-      static copy (same name + fields) is what registers the "waitlist" form.
-      The real, styled form submits to it via AJAX (form-name=waitlist).
-    -->
-    <form name="waitlist" data-netlify="true" netlify-honeypot="bot-field" hidden>
-      <input type="text" name="name" />
-      <input type="email" name="email" />
-      <input type="text" name="role" />
-      <input type="text" name="bot-field" />
-    </form>
 
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

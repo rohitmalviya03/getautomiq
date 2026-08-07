@@ -39,12 +39,6 @@ export function PublicShell({ children }: { children: ReactNode }) {
             >
               Pricing
             </Link>
-            <Link
-              to="/waitlist"
-              className="hidden text-sm font-medium text-slate-600 hover:text-brand-700 dark:text-slate-300 sm:block"
-            >
-             Join Waitlist
-            </Link>
             {authed ? (
               <Link to="/dashboard">
                 <Button size="sm">Dashboard</Button>

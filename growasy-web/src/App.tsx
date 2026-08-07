@@ -41,7 +41,6 @@ import { ToolsHubPage } from '@/pages/tools/ToolsHubPage';
 import { ToolDetailPage } from '@/pages/tools/ToolDetailPage';
 import { PrivacyPage } from '@/pages/legal/PrivacyPage';
 import { TermsPage } from '@/pages/legal/TermsPage';
-import { WaitlistPage } from '@/pages/WaitlistPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const PUBLIC_PATH_PREFIXES = [
@@ -97,8 +96,10 @@ export function App() {
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
 
-      {/* Waitlist (public, Netlify Forms) */}
-      <Route path="/waitlist" element={<WaitlistPage />} />
+      {/* Waitlist is retired — signup is open. Old links/bookmarks land on
+          registration rather than a 404. The page component is still in the
+          repo if it ever needs bringing back. */}
+      <Route path="/waitlist" element={<Navigate to="/register" replace />} />
 
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<LoginPage />} />

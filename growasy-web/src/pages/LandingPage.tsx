@@ -152,9 +152,6 @@ export function LandingPage() {
             <a className="aql-navlink" href="#pricing">
               Pricing
             </a>
-            <Link className="aql-navlink" to="/waitlist">
-              Waitlist
-            </Link>
           </div>
           <div className="aql-nav-actions">
             <button
@@ -544,7 +541,6 @@ export function LandingPage() {
           <div className="aql-foot-links">
             <a href="#features">Features</a>
             <a href="#pricing">Pricing</a>
-            <Link to="/waitlist">Waitlist</Link>
             <Link to="/tools">Free tools</Link>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>
