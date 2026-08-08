@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { useSeo, breadcrumbJsonLd, SITE_URL } from '@/lib/use-seo';
 import { renderMarkdown } from '@/lib/markdown';
 import { blogApi } from '@/lib/blog-api';
+import { ShareButtons } from '@/components/blog/ShareButtons';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '';
@@ -126,6 +127,9 @@ export function BlogPostPage() {
                   <Clock className="h-4 w-4" /> {post.readingMinutes} min read
                 </span>
               </div>
+              <div className="mt-5 border-t border-slate-200 pt-4 dark:border-white/10">
+                <ShareButtons url={canonical} title={post.title} />
+              </div>
             </header>
 
             {post.coverImageUrl ? (
@@ -138,6 +142,11 @@ export function BlogPostPage() {
 
             {/* Safe: renderMarkdown escapes all input before emitting any tag. */}
             <div dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }} />
+
+            {/* Repeated at the end — people share once they've finished reading. */}
+            <div className="mt-10 border-t border-slate-200 pt-6 dark:border-white/10">
+              <ShareButtons url={canonical} title={post.title} />
+            </div>
 
             <div className="mt-12 rounded-2xl border border-slate-200 p-6 text-center dark:border-white/10">
               <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white">
