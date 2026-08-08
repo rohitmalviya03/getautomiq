@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   IndianRupee,
   LifeBuoy,
+  TrendingUp,
   Ticket,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
@@ -15,6 +16,7 @@ import { useAuthStore } from '@/stores/auth-store';
 const TABS = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/customers', label: 'Customers', icon: Building2, end: false },
+  { to: '/admin/traffic', label: 'Traffic', icon: TrendingUp, end: false },
   { to: '/admin/tickets', label: 'Tickets', icon: LifeBuoy, end: false },
   { to: '/admin/pricing', label: 'Pricing', icon: IndianRupee, end: false },
   { to: '/admin/coupons', label: 'Coupons', icon: Ticket, end: false },

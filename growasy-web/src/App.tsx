@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { setUnauthorizedHandler } from '@/lib/api-client';
 import { useBootstrapAuth } from '@/hooks/use-bootstrap-auth';
+import { usePageTracking } from '@/hooks/use-page-tracking';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { SuperAdminRoute } from '@/components/auth/SuperAdminRoute';
 import { PublicOnlyRoute } from '@/components/auth/PublicOnlyRoute';
@@ -33,6 +34,7 @@ import { AdminCustomersPage } from '@/pages/admin/AdminCustomersPage';
 import { AdminCustomerDetailPage } from '@/pages/admin/AdminCustomerDetailPage';
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
 import { HelpCenterPage } from '@/pages/dashboard/HelpCenterPage';
+import { AdminTrafficPage } from '@/pages/admin/AdminTrafficPage';
 import { AdminTicketsPage } from '@/pages/admin/AdminTicketsPage';
 import { AdminPricingPage } from '@/pages/admin/AdminPricingPage';
 import { AdminCouponsPage } from '@/pages/admin/AdminCouponsPage';
@@ -59,6 +61,7 @@ export function App() {
   const ready = useBootstrapAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  usePageTracking();
 
   // Wired once so the api-client (which lives outside the React tree) can
   // send the user to /login after a hard auth failure (refresh also failed).
@@ -139,6 +142,7 @@ export function App() {
           <Route path="/admin" element={<AdminOverviewPage />} />
           <Route path="/admin/customers" element={<AdminCustomersPage />} />
           <Route path="/admin/customers/:id" element={<AdminCustomerDetailPage />} />
+          <Route path="/admin/traffic" element={<AdminTrafficPage />} />
           <Route path="/admin/tickets" element={<AdminTicketsPage />} />
           <Route path="/admin/pricing" element={<AdminPricingPage />} />
           <Route path="/admin/coupons" element={<AdminCouponsPage />} />

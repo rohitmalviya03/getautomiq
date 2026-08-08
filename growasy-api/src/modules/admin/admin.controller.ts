@@ -31,6 +31,7 @@ import {
 import { UpdatePlanDto, UpsertCouponDto } from './dto/pricing.dto';
 import { AdminPricingService } from './admin-pricing.service';
 import { AdminSupportService } from './admin-support.service';
+import { TrafficService } from '../analytics/traffic.service';
 import {
   AdminReplyTicketDto,
   TicketListQueryDto,
@@ -52,6 +53,7 @@ export class AdminController {
     private readonly auth: AuthService,
     private readonly pricing: AdminPricingService,
     private readonly tickets: AdminSupportService,
+    private readonly traffic: TrafficService,
   ) {}
 
   private meta(req: Request) {
@@ -288,6 +290,16 @@ export class AdminController {
   @Get('coupons/:id/redemptions')
   couponRedemptions(@Param('id') id: string) {
     return this.pricing.couponRedemptions(id);
+  }
+
+  // --- Traffic ---------------------------------------------------------------
+
+  /** Visitors, views and the signup funnel. Lookback capped at 90 days. */
+  @Get('traffic')
+  trafficOverview(@Query('days') days?: string) {
+    const parsed = Number(days);
+    const range = Number.isFinite(parsed) ? Math.min(Math.max(Math.trunc(parsed), 1), 90) : 30;
+    return this.traffic.overview(range);
   }
 
   // --- Support tickets -------------------------------------------------------

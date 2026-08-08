@@ -232,6 +232,31 @@ export interface AdminCouponRedemption {
   organization: { id: string; name: string; slug: string } | null;
 }
 
+/** One row of a ranked breakdown (top pages, referrers, devices). */
+export interface TrafficBreakdownRow {
+  label: string;
+  views: number;
+  visitors: number;
+}
+
+export interface TrafficOverview {
+  rangeDays: number;
+  totals: {
+    views: number;
+    uniqueVisitors: number;
+    signedInUsers: number;
+    signups: number;
+    signupRate: number;
+  };
+  /** null means "no baseline to compare against", which is not the same as 0%. */
+  trend: { viewsChangePct: number | null; visitorsChangePct: number | null };
+  daily: Array<{ day: string; views: number; visitors: number }>;
+  topPages: TrafficBreakdownRow[];
+  topReferrers: TrafficBreakdownRow[];
+  devices: TrafficBreakdownRow[];
+  bySurface: TrafficBreakdownRow[];
+}
+
 export interface ImpersonateResponse {
   tokens: { accessToken: string; refreshToken: string; expiresIn: string };
   user: { id: string; email: string; firstName: string; lastName: string };
@@ -288,6 +313,9 @@ export const adminApi = {
     apiClient.patch<unknown>(`/admin/plans/${id}`, body),
 
   // ---- Coupons --------------------------------------------------------------
+  // ---- Traffic --------------------------------------------------------------
+  traffic: (days = 30) => apiClient.get<TrafficOverview>(`/admin/traffic?days=${days}`),
+
   // ---- Support tickets ------------------------------------------------------
   tickets: (params: { status?: string; category?: string; search?: string; page?: number; pageSize?: number } = {}) => {
     const q = new URLSearchParams();

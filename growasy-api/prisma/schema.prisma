@@ -948,6 +948,36 @@ model WebhookEvent {
   @@index([receivedAt])
 }
 
+/// Site/app traffic. One row per tracked page view.
+///
+/// Deliberately cookie-less and IP-less: `visitorHash` is a salted digest of the
+/// IP + user agent, and the salt rotates daily, so a visitor can be counted once
+/// per day without storing anything that identifies them or follows them around.
+/// `userId` is set only when the viewer is signed in — that is what makes
+/// "unique users" (as opposed to "unique visitors") answerable.
+model PageView {
+  id             String   @id @default(uuid()) @db.Char(36)
+  path           String   @db.VarChar(500)
+  referrerHost   String?  @db.VarChar(255) // host only — full referrer URLs can carry PII
+  visitorHash    String   @db.Char(64) // sha256(dailySalt + ip + ua) — anonymous, rotates daily
+  userId         String?  @db.Char(36)
+  organizationId String?  @db.Char(36)
+  /// "public" (marketing/tools) or "app" (signed-in product) — lets the funnel
+  /// separate visitors from usage without parsing paths at query time.
+  surface        String   @db.VarChar(16)
+  deviceType     String?  @db.VarChar(16) // mobile | tablet | desktop
+  browser        String?  @db.VarChar(32)
+  country        String?  @db.VarChar(2)
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([visitorHash, createdAt])
+  // Prefix index: utf8mb4 VARCHAR(500) is 2000 bytes, past MySQL's 767-byte key
+  // limit. 191 chars is the usual safe ceiling and far longer than any real path.
+  @@index([path(length: 191)])
+  @@index([surface, createdAt])
+}
+
 model ApiLog {
   id             String   @id @default(uuid()) @db.Char(36)
   organizationId String?  @db.Char(36)
