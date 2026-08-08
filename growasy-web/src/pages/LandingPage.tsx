@@ -541,6 +541,7 @@ export function LandingPage() {
           <div className="aql-foot-links">
             <a href="#features">Features</a>
             <a href="#pricing">Pricing</a>
+            <Link to="/blog">Blog</Link>
             <Link to="/tools">Free tools</Link>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>

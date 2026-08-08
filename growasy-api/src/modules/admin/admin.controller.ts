@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -32,6 +33,12 @@ import { UpdatePlanDto, UpsertCouponDto } from './dto/pricing.dto';
 import { AdminPricingService } from './admin-pricing.service';
 import { AdminSupportService } from './admin-support.service';
 import { TrafficService } from '../analytics/traffic.service';
+import { BlogService } from '../blog/blog.service';
+import {
+  AdminBlogListQueryDto,
+  CreateBlogPostDto,
+  UpdateBlogPostDto,
+} from '../blog/dto/blog.dto';
 import {
   AdminReplyTicketDto,
   TicketListQueryDto,
@@ -54,6 +61,7 @@ export class AdminController {
     private readonly pricing: AdminPricingService,
     private readonly tickets: AdminSupportService,
     private readonly traffic: TrafficService,
+    private readonly blog: BlogService,
   ) {}
 
   private meta(req: Request) {
@@ -290,6 +298,34 @@ export class AdminController {
   @Get('coupons/:id/redemptions')
   couponRedemptions(@Param('id') id: string) {
     return this.pricing.couponRedemptions(id);
+  }
+
+  // --- Blog ------------------------------------------------------------------
+
+  @Get('blog')
+  listPosts(@Query() query: AdminBlogListQueryDto) {
+    return this.blog.listForAdmin(query);
+  }
+
+  @Get('blog/:id')
+  getPost(@Param('id') id: string) {
+    return this.blog.getForAdmin(id);
+  }
+
+  @Post('blog')
+  createPost(@Body() dto: CreateBlogPostDto, @CurrentUser() actor: AuthenticatedUser) {
+    return this.blog.create(dto, actor);
+  }
+
+  @Patch('blog/:id')
+  updatePost(@Param('id') id: string, @Body() dto: UpdateBlogPostDto) {
+    return this.blog.update(id, dto);
+  }
+
+  /** Soft delete — the slug stays reserved so an old URL can never be reused. */
+  @Delete('blog/:id')
+  deletePost(@Param('id') id: string) {
+    return this.blog.remove(id);
   }
 
   // --- Traffic ---------------------------------------------------------------

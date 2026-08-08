@@ -34,11 +34,14 @@ import { AdminCustomersPage } from '@/pages/admin/AdminCustomersPage';
 import { AdminCustomerDetailPage } from '@/pages/admin/AdminCustomerDetailPage';
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
 import { HelpCenterPage } from '@/pages/dashboard/HelpCenterPage';
+import { AdminBlogPage } from '@/pages/admin/AdminBlogPage';
 import { AdminTrafficPage } from '@/pages/admin/AdminTrafficPage';
 import { AdminTicketsPage } from '@/pages/admin/AdminTicketsPage';
 import { AdminPricingPage } from '@/pages/admin/AdminPricingPage';
 import { AdminCouponsPage } from '@/pages/admin/AdminCouponsPage';
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
+import { BlogListPage } from '@/pages/blog/BlogListPage';
+import { BlogPostPage } from '@/pages/blog/BlogPostPage';
 import { ToolsHubPage } from '@/pages/tools/ToolsHubPage';
 import { ToolDetailPage } from '@/pages/tools/ToolDetailPage';
 import { PrivacyPage } from '@/pages/legal/PrivacyPage';
@@ -52,6 +55,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/reset-password',
   '/verify-email',
   '/tools', // public SEO tool pages — never bounce a logged-out visitor to login
+  '/blog',
   '/privacy',
   '/terms',
   '/waitlist',
@@ -94,6 +98,10 @@ export function App() {
       {/* Public, SEO-facing free tools — no login required. */}
       <Route path="/tools" element={<ToolsHubPage />} />
       <Route path="/tools/:slug" element={<ToolDetailPage />} />
+
+      {/* Public blog — indexable, no login. */}
+      <Route path="/blog" element={<BlogListPage />} />
+      <Route path="/blog/:slug" element={<BlogPostPage />} />
 
       {/* Legal (public) */}
       <Route path="/privacy" element={<PrivacyPage />} />
@@ -142,6 +150,7 @@ export function App() {
           <Route path="/admin" element={<AdminOverviewPage />} />
           <Route path="/admin/customers" element={<AdminCustomersPage />} />
           <Route path="/admin/customers/:id" element={<AdminCustomerDetailPage />} />
+          <Route path="/admin/blog" element={<AdminBlogPage />} />
           <Route path="/admin/traffic" element={<AdminTrafficPage />} />
           <Route path="/admin/tickets" element={<AdminTicketsPage />} />
           <Route path="/admin/pricing" element={<AdminPricingPage />} />

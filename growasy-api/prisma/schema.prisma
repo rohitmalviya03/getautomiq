@@ -305,6 +305,7 @@ model User {
   assignedSupportTickets     SupportTicket[]          @relation("TicketAssignedTo")
   supportTicketMessages      SupportTicketMessage[]
   updatedSystemSettings      SystemSetting[]
+  blogPosts                  BlogPost[]
 
   @@index([status])
   @@index([deletedAt])
@@ -946,6 +947,51 @@ model WebhookEvent {
   @@index([organizationId])
   @@index([status])
   @@index([receivedAt])
+}
+
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Marketing blog. Authored in the admin console, rendered on the public site.
+///
+/// Content is Markdown, not HTML: it is escaped before rendering, so a compromised
+/// admin account still cannot inject script into a public page.
+model BlogPost {
+  id       String     @id @default(uuid()) @db.Char(36)
+  /// URL segment. Immutable once published — changing it breaks inbound links
+  /// and loses whatever ranking the post has earned.
+  slug     String     @unique @db.VarChar(191)
+  title    String     @db.VarChar(255)
+  /// Short teaser for cards and, when seoDescription is blank, the meta description.
+  summary  String     @db.VarChar(500)
+  content  String     @db.LongText // Markdown
+  status   BlogStatus @default(DRAFT)
+
+  coverImageUrl String? @db.VarChar(1024)
+  coverImageAlt String? @db.VarChar(255) // required for accessibility when a cover is set
+  tags          String  @default("[]") @db.VarChar(500) // JSON string[]
+
+  // ---- SEO overrides. Fall back to title/summary when blank. ----
+  seoTitle       String? @db.VarChar(255)
+  seoDescription String? @db.VarChar(320)
+
+  /// Minutes, computed from the word count on save so the list doesn't have to.
+  readingMinutes Int @default(1)
+  viewCount      Int @default(0)
+
+  authorUserId String?   @db.Char(36)
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  author User? @relation(fields: [authorUserId], references: [id])
+
+  @@index([status, publishedAt])
+  @@index([deletedAt])
 }
 
 /// Site/app traffic. One row per tracked page view.

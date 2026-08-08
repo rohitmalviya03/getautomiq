@@ -6,13 +6,14 @@ import { AdminPricingService } from './admin-pricing.service';
 import { AdminSupportService } from './admin-support.service';
 import { SupportModule } from '../support/support.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { BlogModule } from '../blog/blog.module';
 
 /**
  * Platform-owner back office. AuthModule is imported for impersonation session
  * minting; PricingService comes from the @Global BillingModule.
  */
 @Module({
-  imports: [AuthModule, SupportModule, AnalyticsModule],
+  imports: [AuthModule, SupportModule, AnalyticsModule, BlogModule],
   controllers: [AdminController],
   providers: [AdminService, AdminPricingService, AdminSupportService],
 })
