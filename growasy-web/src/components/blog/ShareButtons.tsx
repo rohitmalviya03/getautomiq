@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { Check, Facebook, Linkedin, Link2, Share2 } from 'lucide-react';
+import { Check, Facebook, Instagram, Linkedin, Link2, Share2 } from 'lucide-react';
 
 /**
  * Share controls for a blog post.
  *
- * Instagram has no web share URL — Meta provides share intents for Facebook and
- * Messenger but deliberately none for Instagram, so a link can't open an IG
- * composer from a browser. The native share button covers it instead: on mobile
- * `navigator.share` opens the OS sheet, which lists Instagram alongside
- * everything else the user has installed. That is the only route that actually
- * reaches Instagram, so it's shown first on devices that support it.
+ * Every platform here except Instagram has a documented share URL. Instagram has
+ * none — Meta publishes intents for Facebook and Messenger but deliberately not
+ * for Instagram, so no link can open a Story or Post composer from a browser.
+ * The Instagram button therefore branches on the device rather than pretending
+ * otherwise; see shareToInstagram below.
  */
 
 /** lucide has no WhatsApp/X marks, so these two are inline. */
@@ -34,6 +33,8 @@ const btn =
 
 export function ShareButtons({ url, title }: { url: string; title: string }) {
   const [copied, setCopied] = useState(false);
+  /** Explains the desktop Instagram fallback, where nothing visible would happen otherwise. */
+  const [hint, setHint] = useState<string | null>(null);
   // Feature-detected at render: on desktop Chrome there is no share sheet, so
   // showing the button there would promise something that doesn't happen.
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
@@ -59,70 +60,110 @@ export function ShareButtons({ url, title }: { url: string; title: string }) {
     }
   };
 
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="mr-1 text-sm font-medium text-slate-500 dark:text-slate-400">Share</span>
+  /**
+   * Instagram has no web share intent — Meta publishes them for Facebook and
+   * Messenger but not for Instagram, so no URL can open a Story or Post
+   * composer. On mobile the OS share sheet reaches it (the user taps Instagram,
+   * then Story or Post); on desktop nothing can, so copying the link and saying
+   * so is the honest fallback rather than a button that appears to do nothing.
+   */
+  const shareToInstagram = async () => {
+    if (canNativeShare) {
+      await nativeShare();
+      return;
+    }
+    await copy();
+    setHint('Link copied — open Instagram on your phone to paste it');
+    setTimeout(() => setHint(null), 4000);
+  };
 
-      {canNativeShare ? (
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm font-medium text-slate-500 dark:text-slate-400">Share</span>
+
+        {/* Instagram: no share URL exists, so this does the most useful possible
+          thing per device — the share sheet on mobile (where the user picks
+          Instagram → Story or Post), and copy-link on desktop, where Instagram
+          can't be posted to at all. */}
         <button
           type="button"
-          onClick={nativeShare}
-          aria-label="Share (includes Instagram and other installed apps)"
-          title="Share to Instagram, Stories and more"
+          onClick={shareToInstagram}
+          aria-label="Share to Instagram"
+          title={
+            canNativeShare
+              ? 'Share to Instagram — Story or Post'
+              : 'Copy the link, then paste it in Instagram on your phone'
+          }
           className={`${btn} hover:bg-gradient-to-tr hover:from-amber-500 hover:via-pink-600 hover:to-purple-600`}
         >
-          <Share2 className="h-4 w-4" />
+          <Instagram className="h-4 w-4" />
         </button>
+
+        {canNativeShare ? (
+          <button
+            type="button"
+            onClick={nativeShare}
+            aria-label="Share via your device"
+            title="More sharing options"
+            className={`${btn} hover:bg-slate-700`}
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
+        ) : null}
+
+        <a
+          href={`https://wa.me/?text=${encodedTitle}%20${encodedUrl}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Share on WhatsApp"
+          className={`${btn} hover:bg-[#25D366]`}
+        >
+          <WhatsAppIcon className="h-4 w-4" />
+        </a>
+
+        <a
+          href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Share on Facebook"
+          className={`${btn} hover:bg-[#1877F2]`}
+        >
+          <Facebook className="h-4 w-4" />
+        </a>
+
+        <a
+          href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Share on X"
+          className={`${btn} hover:bg-black`}
+        >
+          <XIcon className="h-3.5 w-3.5" />
+        </a>
+
+        <a
+          href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Share on LinkedIn"
+          className={`${btn} hover:bg-[#0A66C2]`}
+        >
+          <Linkedin className="h-4 w-4" />
+        </a>
+
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={copied ? 'Link copied' : 'Copy link'}
+          className={`${btn} ${copied ? 'border-transparent bg-emerald-500 text-white' : 'hover:bg-slate-700'}`}
+        >
+          {copied ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
+        </button>
+      </div>
+      {hint ? (
+        <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">{hint}</p>
       ) : null}
-
-      <a
-        href={`https://wa.me/?text=${encodedTitle}%20${encodedUrl}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Share on WhatsApp"
-        className={`${btn} hover:bg-[#25D366]`}
-      >
-        <WhatsAppIcon className="h-4 w-4" />
-      </a>
-
-      <a
-        href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Share on Facebook"
-        className={`${btn} hover:bg-[#1877F2]`}
-      >
-        <Facebook className="h-4 w-4" />
-      </a>
-
-      <a
-        href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Share on X"
-        className={`${btn} hover:bg-black`}
-      >
-        <XIcon className="h-3.5 w-3.5" />
-      </a>
-
-      <a
-        href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Share on LinkedIn"
-        className={`${btn} hover:bg-[#0A66C2]`}
-      >
-        <Linkedin className="h-4 w-4" />
-      </a>
-
-      <button
-        type="button"
-        onClick={copy}
-        aria-label={copied ? 'Link copied' : 'Copy link'}
-        className={`${btn} ${copied ? 'border-transparent bg-emerald-500 text-white' : 'hover:bg-slate-700'}`}
-      >
-        {copied ? <Check className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
-      </button>
     </div>
   );
 }
