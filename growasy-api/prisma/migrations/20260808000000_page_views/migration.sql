@@ -23,9 +23,7 @@ CREATE TABLE `PageView` (
 
   INDEX `PageView_createdAt_idx`(`createdAt`),
   INDEX `PageView_visitorHash_createdAt_idx`(`visitorHash`, `createdAt`),
-  -- Prefix index: utf8mb4 VARCHAR(500) is 2000 bytes, past MySQL's 767-byte key
-  -- limit. 191 chars is the usual safe ceiling and longer than any real path.
-  INDEX `PageView_path_idx`(`path`(191)),
+  INDEX `PageView_path_idx`(`path`),
   INDEX `PageView_surface_createdAt_idx`(`surface`, `createdAt`),
   PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

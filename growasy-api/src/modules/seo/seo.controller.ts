@@ -2,14 +2,21 @@ import { Controller, Get, Header, Param, Res } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
+import { RawResponse } from '../../common/decorators/raw-response.decorator';
 import { SeoService } from './seo.service';
 
 /**
  * Crawler-facing routes. All public, all cacheable, none of them JSON — nginx
  * proxies bot traffic here so search engines and AI answer engines get real HTML
  * instead of the SPA's empty root div. See DEPLOY-VPS.md for the nginx snippet.
+ *
+ * @RawResponse is essential here, not cosmetic: without it the global
+ * ResponseInterceptor wraps every return value in {success, data, timestamp},
+ * and a crawler receives a JSON document whose `data` string happens to contain
+ * markup. Google rejects that as a malformed sitemap, and the HTML never renders.
  */
 @ApiExcludeController()
+@RawResponse()
 @Controller({ path: 'seo', version: '1' })
 export class SeoController {
   constructor(private readonly seo: SeoService) {}
