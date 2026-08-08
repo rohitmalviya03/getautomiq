@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Eye, ExternalLink, Plus, Save, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -74,11 +74,26 @@ function Editor({ postId, onDone }: { postId: string | 'new'; onDone: () => void
     queryKey: ['admin', 'blog', postId],
     queryFn: () => adminBlogApi.get(postId),
     enabled: postId !== 'new',
+    // The editor holds unsaved work. A background refetch would hand back a new
+    // object and wipe it (see the hydration guard below), so don't refetch while
+    // someone is typing.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
 
+  // Load the server copy into the form ONCE per post.
+  //
+  // Keying this on `existing.data` alone was a bug: every refetch produced a new
+  // object identity and re-ran the effect, silently resetting the form to the
+  // last saved state. Switching a draft to Published and then tabbing away was
+  // enough to lose the change, so Save wrote DRAFT again and publishing looked
+  // broken.
+  const hydratedFor = useRef<string | null>(null);
   useEffect(() => {
     const p = existing.data;
-    if (!p) return;
+    if (!p || hydratedFor.current === p.id) return;
+    hydratedFor.current = p.id;
     setDraft({
       title: p.title,
       slug: p.slug,

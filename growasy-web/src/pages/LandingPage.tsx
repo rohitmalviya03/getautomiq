@@ -152,6 +152,10 @@ export function LandingPage() {
             <a className="aql-navlink" href="#pricing">
               Pricing
             </a>
+            {/* A route, not an anchor — the others jump within this page. */}
+            <Link className="aql-navlink" to="/blog">
+              Blog
+            </Link>
           </div>
           <div className="aql-nav-actions">
             <button

@@ -34,6 +34,12 @@ export function PublicShell({ children }: { children: ReactNode }) {
               Free tools
             </Link>
             <Link
+              to="/blog"
+              className="hidden text-sm font-medium text-slate-600 hover:text-brand-700 dark:text-slate-300 sm:block"
+            >
+              Blog
+            </Link>
+            <Link
               to="/#pricing"
               className="hidden text-sm font-medium text-slate-600 hover:text-brand-700 dark:text-slate-300 sm:block"
             >
