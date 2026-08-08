@@ -254,6 +254,42 @@ Isiliye **schema change wale deploy se pehle backup lena zaroori hai**.
 
 ---
 
+## 🔍 Crawler rendering (blog ko Google + AI par laane ke liye)
+
+App ek client-rendered SPA hai. Jo client JavaScript nahi chalata use
+`/blog/koi-post` par sirf `<div id="root"></div>` milta hai — na title, na text.
+Google JS render kar leta hai (dheere), par **GPTBot, PerplexityBot, ClaudeBot
+bilkul nahi karte** — aur wahi engines aapke `robots.txt` me invite kiye hue hain.
+
+Iska fix `nginx/crawler-rendering.conf` me hai: crawler requests API par jati
+hain jo poora HTML deta hai (title, meta, canonical, OG, JSON-LD, article body),
+aur insaan ko SPA hi milta hai.
+
+Ek baar server par lagana hai:
+
+```bash
+nano /etc/nginx/sites-available/getautomiq   # repo wali file se blocks copy karo
+nginx -t && systemctl reload nginx
+```
+
+Verify:
+```bash
+# crawler ban ke — post ka apna title aana chahiye
+curl -s -A "GPTBot/1.0" https://app.getautomiq.in/blog/<slug> | grep -o '<title>[^<]*'
+
+# browser ban ke — SPA ka title
+curl -s https://app.getautomiq.in/blog/<slug> | grep -o '<title>[^<]*'
+
+# sitemap me ab blog posts honi chahiye
+curl -s https://app.getautomiq.in/sitemap.xml | grep -c '/blog/'
+```
+
+`sitemap.xml` aur `llms.txt` ab API se serve hote hain, isliye naya post publish
+karte hi unme aa jata hai — frontend rebuild ki zarurat nahi.
+
+**Dhyan:** crawler ko wahi content dena hai jo browser dikhata hai. Alag content
+dena cloaking hai aur Google usse penalise karta hai.
+
 ## 📌 Yaad rakhne wali baatein
 
 - `git pull` = kuch nahi hua. **`npm run build` = asli deploy.**

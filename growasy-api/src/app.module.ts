@@ -20,6 +20,7 @@ import { LinksModule } from './modules/links/links.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { BlogModule } from './modules/blog/blog.module';
+import { SeoModule } from './modules/seo/seo.module';
 import { SupportModule } from './modules/support/support.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './modules/health/health.module';
@@ -64,6 +65,7 @@ import { FeatureGuard } from './common/guards/feature.guard';
     NotificationsModule,
     WorkflowsModule,
     BlogModule,
+    SeoModule,
     SupportModule,
     AdminModule,
   ],
