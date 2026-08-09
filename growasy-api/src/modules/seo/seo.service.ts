@@ -18,6 +18,24 @@ import { escapeHtml, renderMarkdown } from './markdown';
  * pre-rendered for clients that can't run scripts. It is not cloaking: the text
  * served is exactly what a browser ends up displaying.
  */
+/**
+ * Serialises JSON-LD for embedding in a <script> element.
+ *
+ * JSON.stringify escapes quotes but NOT the sequence `</script>`, so a post
+ * whose title contained one would terminate the element early and everything
+ * after it would be parsed as markup. Escaping `<` as < is still valid JSON
+ * — parsers decode the escape — while making the breakout impossible.
+ */
+function jsonLdScript(data: unknown): string {
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
+  return `<script type="application/ld+json">${json}</script>`;
+}
+
+/** Escapes a URL for use inside an HTML attribute. */
+function attr(value: string): string {
+  return escapeHtml(value);
+}
+
 @Injectable()
 export class SeoService {
   constructor(
@@ -103,7 +121,7 @@ ${body}
       description:
         'Practical guides on Instagram automation, comment-to-DM funnels, lead capture and growth for creators and businesses.',
       canonical,
-      head: `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
+      head: jsonLdScript(jsonLd),
       body: `<h1>The Automiq blog</h1>
 <p>Playbooks on Instagram automation, comment-to-DM funnels and turning conversations into customers.</p>
 ${list || '<p>No posts published yet.</p>'}`,
@@ -163,10 +181,10 @@ ${list || '<p>No posts published yet.</p>'}`,
         `<meta property="article:modified_time" content="${new Date(post.updatedAt).toISOString()}" />`,
         ...post.tags.map((t) => `<meta property="article:tag" content="${escapeHtml(t)}" />`),
         post.coverImageUrl
-          ? `<meta property="og:image" content="${post.coverImageUrl}" /><meta name="twitter:image" content="${post.coverImageUrl}" />`
+          ? `<meta property="og:image" content="${attr(post.coverImageUrl)}" /><meta name="twitter:image" content="${attr(post.coverImageUrl)}" />`
           : '',
-        `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
-        `<script type="application/ld+json">${JSON.stringify(breadcrumbs)}</script>`,
+        jsonLdScript(jsonLd),
+        jsonLdScript(breadcrumbs),
       ]
         .filter(Boolean)
         .join('\n'),
@@ -174,7 +192,7 @@ ${list || '<p>No posts published yet.</p>'}`,
 <h1>${escapeHtml(post.title)}</h1>
 <p>${escapeHtml(post.summary)}</p>
 <p><small>${post.authorName ? `${escapeHtml(post.authorName)} · ` : ''}${post.publishedAt ? new Date(post.publishedAt).toISOString().slice(0, 10) : ''} · ${post.readingMinutes} min read</small></p>
-${post.coverImageUrl ? `<img src="${post.coverImageUrl}" alt="${escapeHtml(post.coverImageAlt ?? '')}" />` : ''}
+${post.coverImageUrl ? `<img src="${attr(post.coverImageUrl)}" alt="${escapeHtml(post.coverImageAlt ?? '')}" />` : ''}
 ${renderMarkdown(post.content)}
 </article>
 ${related ? `<nav><h2>Keep reading</h2><ul>${related}</ul></nav>` : ''}`,
