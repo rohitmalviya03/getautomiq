@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Eye, ExternalLink, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, ExternalLink, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast-context';
 import { ApiError } from '@/lib/api-client';
 import { adminBlogApi, type BlogPostInput, type BlogStatus } from '@/lib/blog-api';
 import { renderMarkdown } from '@/lib/markdown';
+import { IMPORT_TEMPLATE, parseMarkdownFile } from '@/lib/blog-import';
 import { inputCls, labelCls, selectCls } from './pricing-ui';
 
 const STATUS_STYLES: Record<BlogStatus, string> = {
@@ -69,6 +70,8 @@ function Editor({ postId, onDone }: { postId: string | 'new'; onDone: () => void
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [preview, setPreview] = useState(false);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const existing = useQuery({
     queryKey: ['admin', 'blog', postId],
@@ -110,6 +113,53 @@ function Editor({ postId, onDone }: { postId: string | 'new'; onDone: () => void
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
+  /**
+   * Reads a Markdown file into the form. Only fields the file actually provides
+   * are overwritten, so importing a body-only file into an existing post keeps
+   * its title, tags and SEO fields.
+   */
+  const onFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { post, warnings } = parseMarkdownFile(await file.text());
+      setDraft((d) => ({
+        ...d,
+        ...(post.title !== undefined ? { title: post.title } : {}),
+        ...(post.summary !== undefined ? { summary: post.summary } : {}),
+        ...(post.slug !== undefined ? { slug: post.slug } : {}),
+        ...(post.status !== undefined ? { status: post.status } : {}),
+        ...(post.coverImageUrl !== undefined ? { coverImageUrl: post.coverImageUrl } : {}),
+        ...(post.coverImageAlt !== undefined ? { coverImageAlt: post.coverImageAlt } : {}),
+        ...(post.tags !== undefined ? { tags: post.tags.join(', ') } : {}),
+        ...(post.seoTitle !== undefined ? { seoTitle: post.seoTitle } : {}),
+        ...(post.seoDescription !== undefined ? { seoDescription: post.seoDescription } : {}),
+        content: post.content,
+      }));
+      setImportWarnings(warnings);
+      showToast({
+        variant: warnings.length > 0 ? 'info' : 'success',
+        title: `Imported ${file.name}`,
+        description: 'Nothing is saved yet — review and hit Save.',
+      });
+    } catch {
+      showToast({ variant: 'error', title: 'Could not read that file' });
+    } finally {
+      // Reset so picking the same file again still fires a change event.
+      e.target.value = '';
+    }
+  };
+
+  const downloadTemplate = () => {
+    const blob = new Blob([IMPORT_TEMPLATE], { type: 'text/markdown;charset=utf-8' });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = 'automiq-blog-template.md';
+    a.click();
+    URL.revokeObjectURL(href);
+  };
+
   const save = useMutation({
     mutationFn: () =>
       postId === 'new'
@@ -146,6 +196,18 @@ function Editor({ postId, onDone }: { postId: string | 'new'; onDone: () => void
           <ArrowLeft className="h-4 w-4" /> All posts
         </button>
         <div className="flex items-center gap-2">
+          {/* Import fills the form; nothing is written until Save, so a bad file
+              can be corrected or abandoned rather than published by accident. */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".md,.markdown,.txt,text/markdown,text/plain"
+            className="hidden"
+            onChange={onFilePicked}
+          />
+          <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
+            <Upload className="h-4 w-4" /> Import .md
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => setPreview((p) => !p)}>
             <Eye className="h-4 w-4" /> {preview ? 'Edit' : 'Preview'}
           </Button>
@@ -154,6 +216,19 @@ function Editor({ postId, onDone }: { postId: string | 'new'; onDone: () => void
           </Button>
         </div>
       </div>
+
+      {importWarnings.length > 0 ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+          <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+            Imported — check these before saving:
+          </p>
+          <ul className="mt-1 list-disc pl-5 text-sm text-amber-700 dark:text-amber-300">
+            {importWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {postId !== 'new' && existing.isLoading ? (
         <Skeleton className="h-96 w-full rounded-2xl" />
@@ -273,6 +348,17 @@ function Editor({ postId, onDone }: { postId: string | 'new'; onDone: () => void
               <p className="mt-1 text-xs text-slate-400">
                 Markdown only — raw HTML is shown as text, never executed. Use `## Heading`,
                 `**bold**`, `[link](url)`, `![alt](image-url)`, `-` for lists.
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Prefer writing in your own editor?{' '}
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="focus-ring rounded font-medium text-brand-600 underline underline-offset-2 dark:text-brand-300"
+                >
+                  Download the .md template
+                </button>
+                , fill it in, then use <strong>Import .md</strong> above.
               </p>
             </CardContent>
           </Card>
