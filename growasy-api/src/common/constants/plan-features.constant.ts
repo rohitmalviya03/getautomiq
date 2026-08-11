@@ -16,6 +16,12 @@ export const PLAN_FEATURES = {
   MULTIPLE_WORKSPACES: 'multiple_workspaces',
   /** AI DM Agent (Growth and above). */
   AI_DM_AGENT: 'ai_dm_agent',
+  /** Tying reported sales back to the automation that earned them (Pro and above). */
+  REVENUE_ATTRIBUTION: 'revenue_attribution',
+  /** Issuing API keys and calling the public API with them (Pro and above). */
+  API_ACCESS: 'api_access',
+  /** More than one DM wording per automation, with per-variant results (Pro and above). */
+  AB_TESTING: 'ab_testing',
 } as const;
 
 export type PlanFeatureKey = (typeof PLAN_FEATURES)[keyof typeof PLAN_FEATURES];
@@ -38,6 +44,23 @@ export const FEATURE_TIER_MATRIX: Record<PlanFeatureKey, OrgPlanTier[]> = {
   ],
   [PLAN_FEATURES.WORKFLOWS]: [
     OrgPlanTier.GROWTH,
+    OrgPlanTier.PROFESSIONAL,
+    OrgPlanTier.AGENCY,
+    OrgPlanTier.ENTERPRISE,
+  ],
+  // Sold on the pricing page as Professional-tier features, so Growth does not
+  // get them even though it sits above Starter.
+  [PLAN_FEATURES.REVENUE_ATTRIBUTION]: [
+    OrgPlanTier.PROFESSIONAL,
+    OrgPlanTier.AGENCY,
+    OrgPlanTier.ENTERPRISE,
+  ],
+  [PLAN_FEATURES.API_ACCESS]: [
+    OrgPlanTier.PROFESSIONAL,
+    OrgPlanTier.AGENCY,
+    OrgPlanTier.ENTERPRISE,
+  ],
+  [PLAN_FEATURES.AB_TESTING]: [
     OrgPlanTier.PROFESSIONAL,
     OrgPlanTier.AGENCY,
     OrgPlanTier.ENTERPRISE,

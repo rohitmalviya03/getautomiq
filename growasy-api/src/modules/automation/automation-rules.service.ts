@@ -9,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PlanLimitsService } from '../billing/plan-limits.service';
 import { CreateAutomationRuleDto } from './dto/create-automation-rule.dto';
 import { UpdateAutomationRuleDto } from './dto/update-automation-rule.dto';
+import { PLAN_FEATURES } from '../../common/constants/plan-features.constant';
 
 /** Shape of the JSON in AutomationTrigger.config. */
 interface TriggerConfig {
@@ -57,6 +58,8 @@ export class AutomationRulesService {
     if ((dto.status ?? 'ACTIVE') === 'ACTIVE') {
       await this.planLimits.assertCanCreateActiveRule(organizationId);
     }
+
+    await this.assertCanUseVariants(organizationId, dto.dmVariants);
 
     const rule = await this.prisma.$transaction(async (tx) => {
       const created = await tx.automationRule.create({
@@ -202,6 +205,7 @@ export class AutomationRulesService {
         dto.emailSuccessMessage !== undefined ||
         dto.emailFailureMessage !== undefined;
       if (wantsDmUpdate) {
+        await this.assertCanUseVariants(organizationId, dto.dmVariants);
         const dmAction = existing.actions.find((a) => a.type === 'SEND_DM');
         if (dmAction) {
           const prev = this.parse<DmConfig>(dmAction.config) ?? {};
@@ -412,6 +416,24 @@ export class AutomationRulesService {
 
     return { running: true, totalSent, leader, variants };
   }
+  /**
+   * A/B testing is sold as a Professional feature, so alternative wordings are
+   * refused below that tier. Enforced here rather than with @RequireFeature
+   * because the route itself stays open to everyone — only the extra messages
+   * are withheld, and a rule that already has them keeps running.
+   */
+  private async assertCanUseVariants(organizationId: string, variants?: string[]) {
+    if (!(variants ?? []).some((v) => v.trim().length > 0)) return;
+
+    const unlocked = await this.planLimits.hasFeature(organizationId, PLAN_FEATURES.AB_TESTING);
+    if (!unlocked) {
+      throw new ForbiddenException({
+        error: 'PLAN_FEATURE_LOCKED',
+        message: 'A/B testing your DM wording is not included in your current plan.',
+      });
+    }
+  }
+
   private buildDmConfig(input: DmConfig): string {
     const config: DmConfig = { text: input.text ?? '', collectEmail: input.collectEmail ?? false };
     if (input.emailSuccessMessage) config.emailSuccessMessage = input.emailSuccessMessage;

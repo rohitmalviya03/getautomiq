@@ -306,27 +306,28 @@ model User {
   supportTicketMessages      SupportTicketMessage[]
   updatedSystemSettings      SystemSetting[]
   blogPosts                  BlogPost[]
+  createdApiKeys             ApiKey[]                 @relation("ApiKeyCreatedBy")
 
   @@index([status])
   @@index([deletedAt])
 }
 
 model Organization {
-  id        String    @id @default(uuid()) @db.Char(36)
-  name      String    @db.VarChar(255)
-  slug      String    @unique @db.VarChar(191)
-  ownerId   String    @db.Char(36)
-  logoUrl   String?   @db.VarChar(1024)
-  timezone  String    @default("UTC") @db.VarChar(64)
-  isActive  Boolean   @default(true)
+  id                  String       @id @default(uuid()) @db.Char(36)
+  name                String       @db.VarChar(255)
+  slug                String       @unique @db.VarChar(191)
+  ownerId             String       @db.Char(36)
+  logoUrl             String?      @db.VarChar(1024)
+  timezone            String       @default("UTC") @db.VarChar(64)
+  isActive            Boolean      @default(true)
   // Plan chosen at signup that still needs payment. While set, the org stays on
   // Free (paid features locked) and the dashboard prompts to complete payment.
   // Cleared on successful payment or when the user opts to stay on Free.
   pendingPlanTier     OrgPlanTier?
-  pendingBillingCycle String?   @db.VarChar(10)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  pendingBillingCycle String?      @db.VarChar(10)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  deletedAt           DateTime?
 
   owner               User                 @relation("OrganizationOwner", fields: [ownerId], references: [id])
   members             OrganizationMember[]
@@ -350,6 +351,8 @@ model Organization {
   trackedLinks        TrackedLink[]
   workflows           Workflow[]
   couponRedemptions   CouponRedemption[]
+  apiKeys             ApiKey[]
+  conversions         Conversion[]
 
   @@index([ownerId])
   @@index([deletedAt])
@@ -530,6 +533,7 @@ model AutomationRule {
   actions          AutomationAction[]
   executionLogs    AutomationExecutionLog[]
   messages         Message[]
+  conversions      Conversion[]
 
   @@index([organizationId])
   @@index([instagramAccountId])
@@ -795,6 +799,7 @@ model Contact {
   conversations    Conversation[]
   messages         Message[]
   executionLogs    AutomationExecutionLog[]
+  conversions      Conversion[]
 
   @@unique([instagramAccountId, instagramScopedId])
   @@index([organizationId])
@@ -907,6 +912,7 @@ model TrackedLink {
   instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id])
   createdBy        User?             @relation("LinkCreatedBy", fields: [createdByUserId], references: [id])
   clicks           LinkClick[]
+  conversions      Conversion[]
 
   @@index([organizationId])
   @@index([instagramAccountId])
@@ -928,6 +934,79 @@ model LinkClick {
 
   @@index([trackedLinkId, createdAt])
   @@index([trackedLinkId, visitorHash])
+}
+
+// ============================================================================
+// REVENUE ATTRIBUTION
+// ============================================================================
+
+enum ConversionSource {
+  API // reported by the creator's storefront over the conversions API
+  MANUAL // marked by hand from the dashboard
+}
+
+/// A key the creator's storefront authenticates with when reporting a sale.
+/// Only the hash is stored — the plaintext is shown once at creation and is
+/// unrecoverable afterwards, so a leaked database yields no usable keys.
+model ApiKey {
+  id              String    @id @default(uuid()) @db.Char(36)
+  organizationId  String    @db.Char(36)
+  name            String    @db.VarChar(100)
+  keyHash         String    @unique @db.Char(64) // sha256 hex of the full key — the lookup column
+  /// Leading characters of the key, so the owner can tell their keys apart in
+  /// the list without us holding the secret.
+  keyPrefix       String    @db.VarChar(24)
+  createdByUserId String?   @db.Char(36)
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("ApiKeyCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([organizationId])
+}
+
+/// A sale the creator reported back to Automiq, tied to whichever automation
+/// touched that buyer. Automiq never handles the transaction itself, so revenue
+/// exists here only because the storefront (or the creator) told us about it —
+/// attribution is resolved once, at write time, and then frozen. Re-resolving
+/// later would silently rewrite history as contacts and rules change.
+model Conversion {
+  id             String           @id @default(uuid()) @db.Char(36)
+  organizationId String           @db.Char(36)
+  source         ConversionSource
+  /// The order id in the creator's own system. Unique per org, so a storefront
+  /// that retries its webhook doesn't book the same sale twice. Null for
+  /// manually marked conversions, and MySQL permits repeated NULLs here.
+  externalId     String?          @db.VarChar(120)
+  value          Int // minor units (paise), same convention as Plan and Payment
+  currency       String           @default("INR") @db.VarChar(10)
+  buyerEmail     String?          @db.VarChar(255) // as reported, kept for reconciliation
+
+  // ---- attribution, resolved at write time ----
+  contactId     String? @db.Char(36)
+  ruleId        String? @db.Char(36)
+  mediaId       String? @db.VarChar(64) // the post whose comment started the conversation
+  variantId     String? @db.VarChar(8) // which A/B message this buyer received
+  trackedLinkId String? @db.Char(36)
+  /// How the buyer was identified: email | contact | link | none. Whether it
+  /// was reported or hand-entered is `source`, not this.
+  matchedBy     String  @db.VarChar(16)
+
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  rule         AutomationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  trackedLink  TrackedLink?    @relation(fields: [trackedLinkId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, occurredAt])
+  @@index([ruleId, variantId])
+  @@index([contactId])
+  @@index([trackedLinkId])
 }
 
 // ============================================================================
@@ -967,15 +1046,15 @@ enum BlogStatus {
 /// Content is Markdown, not HTML: it is escaped before rendering, so a compromised
 /// admin account still cannot inject script into a public page.
 model BlogPost {
-  id       String     @id @default(uuid()) @db.Char(36)
+  id      String     @id @default(uuid()) @db.Char(36)
   /// URL segment. Immutable once published — changing it breaks inbound links
   /// and loses whatever ranking the post has earned.
-  slug     String     @unique @db.VarChar(191)
-  title    String     @db.VarChar(255)
+  slug    String     @unique @db.VarChar(191)
+  title   String     @db.VarChar(255)
   /// Short teaser for cards and, when seoDescription is blank, the meta description.
-  summary  String     @db.VarChar(500)
-  content  String     @db.LongText // Markdown
-  status   BlogStatus @default(DRAFT)
+  summary String     @db.VarChar(500)
+  content String     @db.LongText // Markdown
+  status  BlogStatus @default(DRAFT)
 
   coverImageUrl String? @db.VarChar(1024)
   coverImageAlt String? @db.VarChar(255) // required for accessibility when a cover is set
@@ -1314,24 +1393,24 @@ model FeatureFlag {
 }
 
 model SupportTicket {
-  id               String                @id @default(uuid()) @db.Char(36)
-  organizationId   String                @db.Char(36)
-  createdByUserId  String                @db.Char(36)
-  assignedToUserId String?               @db.Char(36)
-  subject          String                @db.VarChar(255)
-  category         SupportCategory       @default(OTHER)
-  status           SupportTicketStatus   @default(OPEN)
-  priority         SupportTicketPriority @default(MEDIUM)
+  id                  String                @id @default(uuid()) @db.Char(36)
+  organizationId      String                @db.Char(36)
+  createdByUserId     String                @db.Char(36)
+  assignedToUserId    String?               @db.Char(36)
+  subject             String                @db.VarChar(255)
+  category            SupportCategory       @default(OTHER)
+  status              SupportTicketStatus   @default(OPEN)
+  priority            SupportTicketPriority @default(MEDIUM)
   // How the customer wants to be reached. Captured per ticket rather than read
   // off the account, because the person raising it often wants a reply on a
   // different address or a phone number.
-  contactEmail     String?               @db.VarChar(255)
-  contactPhone     String?               @db.VarChar(32)
+  contactEmail        String?               @db.VarChar(255)
+  contactPhone        String?               @db.VarChar(32)
   /// Set when the requester last added a message — powers the "waiting on us" view.
   lastCustomerReplyAt DateTime?
-  closedAt         DateTime?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  closedAt            DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy    User                   @relation("TicketCreatedBy", fields: [createdByUserId], references: [id])

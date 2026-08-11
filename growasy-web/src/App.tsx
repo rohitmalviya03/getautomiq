@@ -25,6 +25,7 @@ import { ContentPage } from '@/pages/dashboard/ContentPage';
 import { ContactsPage } from '@/pages/dashboard/ContactsPage';
 import { AnalyticsPage } from '@/pages/dashboard/AnalyticsPage';
 import { LinksPage } from '@/pages/dashboard/LinksPage';
+import { RevenuePage } from '@/pages/dashboard/RevenuePage';
 import { BillingPage } from '@/pages/dashboard/BillingPage';
 import { WorkflowsPage } from '@/pages/dashboard/WorkflowsPage';
 import { WorkflowBuilderPage } from '@/pages/dashboard/WorkflowBuilderPage';
@@ -134,6 +135,7 @@ export function App() {
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/links" element={<LinksPage />} />
+          <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/help" element={<HelpCenterPage />} />
           {/* META_REDIRECT_URI points at exactly this path — do not rename. */}

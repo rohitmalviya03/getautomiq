@@ -23,6 +23,7 @@ import { BlogModule } from './modules/blog/blog.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { SupportModule } from './modules/support/support.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { RevenueModule } from './modules/revenue/revenue.module';
 import { HealthModule } from './modules/health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -68,6 +69,7 @@ import { FeatureGuard } from './common/guards/feature.guard';
     SeoModule,
     SupportModule,
     AdminModule,
+    RevenueModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
