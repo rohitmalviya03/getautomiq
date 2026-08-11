@@ -35,6 +35,8 @@ export async function openLeadCapture(
     organizationId: string;
     contactScopedId: string;
     ruleId: string;
+    /** Carried from the DM so a completed capture credits the right variant. */
+    variantId?: string | null;
   },
 ): Promise<void> {
   const expiresAt = new Date(Date.now() + LEAD_CAPTURE_WINDOW_MS);
@@ -50,6 +52,7 @@ export async function openLeadCapture(
       status: CAPTURE_STATUS.AWAITING,
       attempts: 0,
       capturedEmail: null,
+      variantId: input.variantId ?? null,
       expiresAt,
     },
     create: {
@@ -58,6 +61,7 @@ export async function openLeadCapture(
       contactScopedId: input.contactScopedId,
       ruleId: input.ruleId,
       status: CAPTURE_STATUS.AWAITING,
+      variantId: input.variantId ?? null,
       expiresAt,
     },
   });

@@ -92,6 +92,7 @@ export class AutomationRulesService {
           order: 0,
           config: this.buildDmConfig({
             text: dto.dmText,
+            variants: dto.dmVariants ?? [],
             collectEmail: dto.collectEmail ?? false,
             emailSuccessMessage: dto.emailSuccessMessage,
             emailFailureMessage: dto.emailFailureMessage,
@@ -196,6 +197,7 @@ export class AutomationRulesService {
       // changed) are preserved.
       const wantsDmUpdate =
         dto.dmText !== undefined ||
+        dto.dmVariants !== undefined ||
         dto.collectEmail !== undefined ||
         dto.emailSuccessMessage !== undefined ||
         dto.emailFailureMessage !== undefined;
@@ -208,6 +210,7 @@ export class AutomationRulesService {
             data: {
               config: this.buildDmConfig({
                 text: dto.dmText ?? prev.text ?? '',
+                variants: dto.dmVariants ?? prev.variants ?? [],
                 collectEmail: dto.collectEmail ?? prev.collectEmail ?? false,
                 emailSuccessMessage: dto.emailSuccessMessage ?? prev.emailSuccessMessage,
                 emailFailureMessage: dto.emailFailureMessage ?? prev.emailFailureMessage,
@@ -335,6 +338,7 @@ export class AutomationRulesService {
       matchType: trigger?.matchType ?? 'CONTAINS',
       keywords: this.parse<string[]>(trigger?.keywords ?? null) ?? [],
       dmText: dmConfig.text ?? '',
+      dmVariants: dmConfig.variants ?? [],
       replyText: replyAction
         ? (this.parse<{ text?: string }>(replyAction.config)?.text ?? null)
         : null,
@@ -352,10 +356,70 @@ export class AutomationRulesService {
   }
 
   /** Serializes the SEND_DM action config, dropping undefined optional fields. */
+  /**
+   * A/B results for one rule: how each message variant performed.
+   *
+   * Sends come from the event ledger; captures from completed lead-capture rows,
+   * which carry the variant of the DM that opened them. Rules with a single
+   * message report no variants at all rather than a meaningless single row.
+   */
+  async variantStats(organizationId: string, ruleId: string) {
+    const rule = await this.prisma.automationRule.findFirst({
+      where: { id: ruleId, organizationId, deletedAt: null },
+      include: { actions: true },
+    });
+    if (!rule) throw new NotFoundException('Automation rule not found');
+
+    const dmAction = rule.actions.find((a) => a.type === 'SEND_DM');
+    const dmConfig = this.parse<DmConfig>(dmAction?.config ?? null) ?? {};
+    const texts = [dmConfig.text ?? '', ...(dmConfig.variants ?? [])].filter(Boolean);
+    if (texts.length < 2) return { running: false, variants: [] };
+
+    const [sends, captures] = await Promise.all([
+      this.prisma.processedComment.groupBy({
+        by: ['variantId'],
+        where: { ruleId, dmSent: true },
+        _count: { _all: true },
+      }),
+      this.prisma.pendingLeadCapture.groupBy({
+        by: ['variantId'],
+        where: { ruleId, status: 'COMPLETED' },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const sendsBy = new Map(sends.map((r) => [r.variantId, r._count._all]));
+    const capturesBy = new Map(captures.map((r) => [r.variantId, r._count._all]));
+
+    const variants = texts.map((text, i) => {
+      const id = String.fromCharCode(65 + i);
+      const sent = sendsBy.get(id) ?? 0;
+      const captured = capturesBy.get(id) ?? 0;
+      return {
+        id,
+        text,
+        sent,
+        captured,
+        // Only meaningful once the variant has actually been sent.
+        captureRate: sent > 0 ? Number(((captured / sent) * 100).toFixed(1)) : null,
+      };
+    });
+
+    const totalSent = variants.reduce((n, v) => n + v.sent, 0);
+    // A leader off a handful of sends is noise, not a result.
+    const ranked = [...variants].filter((v) => v.sent >= 20).sort((a, b) => (b.captureRate ?? 0) - (a.captureRate ?? 0));
+    const leader = ranked.length >= 2 && (ranked[0].captureRate ?? 0) > (ranked[1].captureRate ?? 0) ? ranked[0].id : null;
+
+    return { running: true, totalSent, leader, variants };
+  }
   private buildDmConfig(input: DmConfig): string {
     const config: DmConfig = { text: input.text ?? '', collectEmail: input.collectEmail ?? false };
     if (input.emailSuccessMessage) config.emailSuccessMessage = input.emailSuccessMessage;
     if (input.emailFailureMessage) config.emailFailureMessage = input.emailFailureMessage;
+    // Blank alternatives are dropped rather than stored — an empty variant would
+    // otherwise be picked by a send and deliver an empty DM.
+    const variants = (input.variants ?? []).map((v) => v.trim()).filter(Boolean);
+    if (variants.length > 0) config.variants = variants;
     return JSON.stringify(config);
   }
 
@@ -372,6 +436,8 @@ export class AutomationRulesService {
 /** Shape stored in a SEND_DM action's config JSON. */
 interface DmConfig {
   text?: string;
+  /** Alternative wordings. Combined with `text` (variant A) when a send picks one. */
+  variants?: string[];
   collectEmail?: boolean;
   emailSuccessMessage?: string;
   emailFailureMessage?: string;

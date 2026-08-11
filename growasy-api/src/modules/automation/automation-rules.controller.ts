@@ -53,6 +53,13 @@ export class AutomationRulesController {
     return this.rulesService.findById(organizationId, id);
   }
 
+  /** A/B results: sends and email captures per message variant. */
+  @Get(':id/variants')
+  @RequirePermissions(PERMISSIONS.AUTOMATION_READ)
+  variants(@CurrentOrgId() organizationId: string, @Param('id') id: string) {
+    return this.rulesService.variantStats(organizationId, id);
+  }
+
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.AUTOMATION_UPDATE)
   update(

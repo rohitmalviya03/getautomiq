@@ -13,7 +13,24 @@ export interface ActivityEvent {
   createdAt: string;
 }
 
+/** A/B results for one rule. `running: false` when it has a single message. */
+export interface VariantStats {
+  running: boolean;
+  totalSent?: number;
+  /** Best performer, or null while the numbers are still too small to call. */
+  leader?: string | null;
+  variants: Array<{
+    id: string;
+    text: string;
+    sent: number;
+    captured: number;
+    captureRate: number | null;
+  }>;
+}
+
 export const automationsApi = {
+  variantStats: (ruleId: string) =>
+    apiClient.get<VariantStats>(`/automations/rules/${ruleId}/variants`),
   /** List rules, optionally scoped to one Instagram account. */
   list: (instagramAccountId?: string) =>
     apiClient.get<AutomationRule[]>(

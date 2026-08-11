@@ -152,6 +152,8 @@ export interface AutomationRule {
   matchType: TriggerMatchType;
   keywords: string[];
   dmText: string;
+  /** Alternative wordings. Two or more messages total means an A/B test is running. */
+  dmVariants: string[];
   replyText: string | null;
   /** Posts the rule is limited to. Empty = every post on the account. */
   mediaIds: string[];
@@ -206,6 +208,7 @@ export interface AutomationRulePayload {
   matchType: TriggerMatchType;
   keywords: string[];
   dmText: string;
+  dmVariants?: string[];
   replyText?: string;
   mediaIds?: string[];
   maxDmsPerUserPer24h?: number;

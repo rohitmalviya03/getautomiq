@@ -86,6 +86,60 @@ function makeMetaClient(overrides: Partial<MetaGraphClient> = {}): MetaGraphClie
   } as unknown as MetaGraphClient;
 }
 
+describe('processAutomationExecution — A/B variants', () => {
+  /** A rule whose SEND_DM carries alternatives alongside the main message. */
+  function abRule() {
+    return ruleWithDm({
+      actions: [
+        {
+          type: 'SEND_DM',
+          order: 0,
+          config: JSON.stringify({ text: 'Version A', variants: ['Version B', 'Version C'] }),
+        },
+      ],
+    });
+  }
+
+  it('sends one of the variants and records which one', async () => {
+    const prisma = makePrisma({ automationRule: { findFirst: vi.fn().mockResolvedValue(abRule()) } });
+    const metaClient = makeMetaClient();
+
+    await processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient });
+
+    const sentText = (metaClient.sendDmToComment as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(['Version A', 'Version B', 'Version C']).toContain(sentText);
+
+    const recorded = (prisma.processedComment.upsert as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(['A', 'B', 'C']).toContain(recorded.update.variantId);
+  });
+
+  // Recording a variant on a rule with one message would make the results panel
+  // show a pointless single-row "test".
+  it('records no variant when the rule has a single message', async () => {
+    const prisma = makePrisma();
+    const metaClient = makeMetaClient();
+
+    await processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient });
+
+    const recorded = (prisma.processedComment.upsert as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(recorded.update.variantId).toBeUndefined();
+  });
+
+  it('spreads sends across the variants rather than always picking one', async () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 60; i += 1) {
+      const prisma = makePrisma({
+        automationRule: { findFirst: vi.fn().mockResolvedValue(abRule()) },
+      });
+      const metaClient = makeMetaClient();
+      await processAutomationExecution(JOB, { prisma, decryptor: makeDecryptor(), metaClient });
+      seen.add((metaClient.sendDmToComment as ReturnType<typeof vi.fn>).mock.calls[0][1] as string);
+    }
+    // With 60 draws over 3 options, hitting only one is ~2 in 10^28.
+    expect(seen.size).toBeGreaterThan(1);
+  });
+});
+
 describe('processAutomationExecution', () => {
   it('sends the DM and marks the comment dm_sent', async () => {
     const prisma = makePrisma();

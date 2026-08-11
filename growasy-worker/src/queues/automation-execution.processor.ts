@@ -32,6 +32,8 @@ interface TriggerConfig {
 
 interface ActionConfig {
   text?: string;
+  /** Alternative wordings; combined with `text` (variant A) for A/B tests. */
+  variants?: string[];
   collectEmail?: boolean;
   emailSuccessMessage?: string;
   emailFailureMessage?: string;
@@ -71,7 +73,14 @@ async function markProcessed(
   prisma: PrismaClient,
   commentId: string,
   dedupKey: string,
-  data: { matched?: boolean; dmSent?: boolean; outcome: string; errorMessage?: string | null },
+  data: {
+    matched?: boolean;
+    dmSent?: boolean;
+    outcome: string;
+    errorMessage?: string | null;
+    /** Which A/B variant was sent, when the rule has more than one message. */
+    variantId?: string | null;
+  },
 ): Promise<void> {
   // The stage-1 row usually exists already; upsert keeps this safe even if it
   // somehow doesn't (e.g. a job replayed out of order). `dedupKey` must be the
@@ -83,6 +92,7 @@ async function markProcessed(
       dmSent: data.dmSent ?? undefined,
       outcome: data.outcome,
       errorMessage: data.errorMessage ?? null,
+      variantId: data.variantId ?? undefined,
     },
     create: {
       commentId,
@@ -92,6 +102,7 @@ async function markProcessed(
       dmSent: data.dmSent ?? false,
       outcome: data.outcome,
       errorMessage: data.errorMessage ?? null,
+      variantId: data.variantId ?? null,
     },
   });
 }
@@ -180,7 +191,12 @@ export async function processAutomationExecution(
 
   const dmAction = rule.actions.find((a) => a.type === 'SEND_DM');
   const dmConfig = parseJson<ActionConfig>(dmAction?.config ?? null);
-  const dmText = renderTemplate(dmConfig?.text ?? '');
+  // Variant A is the main text; alternatives follow. Chosen per send so the
+  // split stays even over time without tracking assignment per contact.
+  const dmChoices = [dmConfig?.text ?? '', ...(dmConfig?.variants ?? [])].filter(Boolean);
+  const variantIndex = dmChoices.length > 1 ? Math.floor(Math.random() * dmChoices.length) : 0;
+  const variantId = dmChoices.length > 1 ? String.fromCharCode(65 + variantIndex) : null;
+  const dmText = renderTemplate(dmChoices[variantIndex] ?? '');
   const willSendDm = Boolean(dmAction && dmText);
 
   const token = decryptor.decrypt(account.accessTokenEncrypted);
@@ -242,11 +258,17 @@ export async function processAutomationExecution(
           organizationId: org,
           contactScopedId: commenterId,
           ruleId,
+          variantId,
         });
       }
     }
 
-    await markProcessed(prisma, eventId, dedupKey, { matched: true, dmSent: true, outcome: 'dm_sent' });
+    await markProcessed(prisma, eventId, dedupKey, {
+      matched: true,
+      dmSent: true,
+      outcome: 'dm_sent',
+      variantId,
+    });
     logOutcome({ ...logBase, organizationId: org, outcome: 'dm_sent' });
   } catch (error) {
     // The send failed — release the reserved DM slot so the counter only ever

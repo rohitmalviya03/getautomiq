@@ -32,6 +32,7 @@ import { instagramApi } from '@/lib/instagram-api';
 import { automationsApi } from '@/lib/automations-api';
 import { ApiError } from '@/lib/api-client';
 import { automationRuleSchema, type AutomationFormValues } from '@/schemas/automation.schemas';
+import { VariantResults } from '@/components/automations/VariantResults';
 import { AUTOMATION_TEMPLATES, findTemplate } from '@/lib/automation-templates';
 import type {
   AutomationRule,
@@ -135,6 +136,7 @@ function toFormValues(rule: AutomationRule): AutomationFormValues {
     matchType: rule.matchType === 'ANY' ? 'ANY' : rule.matchType,
     keywords: rule.keywords.join(', '),
     dmText: rule.dmText,
+    dmVariants: (rule.dmVariants ?? []).join('\n'),
     replyText: rule.replyText ?? '',
     mediaIds: rule.mediaIds ?? (rule.mediaId ? [rule.mediaId] : []),
     maxDmsPerUserPer24h: rule.maxDmsPerUserPer24h ? String(rule.maxDmsPerUserPer24h) : '',
@@ -160,6 +162,11 @@ function toPayload(values: AutomationFormValues): AutomationRulePayload {
             .map((k) => k.trim())
             .filter(Boolean),
     dmText: values.dmText.trim(),
+    // One alternative per line; blanks dropped so an empty line can never be sent.
+    dmVariants: values.dmVariants
+      .split('\n')
+      .map((v) => v.trim())
+      .filter(Boolean),
     // Public reply + per-post filter only apply when a comment trigger is included.
     replyText: hasComment && values.replyText.trim() ? values.replyText.trim() : undefined,
     mediaIds: hasComment ? values.mediaIds : [],
@@ -187,6 +194,7 @@ const EMPTY_FORM: AutomationFormValues = {
   matchType: 'CONTAINS',
   keywords: '',
   dmText: '',
+  dmVariants: '',
   replyText: '',
   mediaIds: [],
   maxDmsPerUserPer24h: '',
@@ -718,6 +726,22 @@ export function AutomationsPage() {
                   <FieldError message={errors.dmText?.message} />
                 </div>
 
+                <div>
+                  <Label htmlFor="dmVariants">Test other wordings (optional)</Label>
+                  <Textarea
+                    id="dmVariants"
+                    rows={3}
+                    placeholder={'One alternative per line — each is sent to a random share of people'}
+                    error={errors.dmVariants?.message}
+                    {...register('dmVariants')}
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    Add one or more and Automiq splits sends between them, then shows which
+                    collects the most emails. Leave empty to always send the message above.
+                  </p>
+                  <FieldError message={errors.dmVariants?.message} />
+                </div>
+
                 <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40">
                   <label htmlFor="collectEmail" className="flex cursor-pointer items-start gap-3">
                     <input
@@ -861,6 +885,7 @@ export function AutomationsPage() {
             {rules.map((rule) => (
               <Card key={rule.id}>
                 <CardContent className="space-y-3 py-4">
+                  {rule.dmVariants?.length ? <VariantResults ruleId={rule.id} /> : null}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">

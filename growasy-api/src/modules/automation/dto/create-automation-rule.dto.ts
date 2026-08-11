@@ -75,6 +75,20 @@ export class CreateAutomationRuleDto {
   @MaxLength(1000)
   dmText: string;
 
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Alternative wordings of the DM. With any present the rule A/B tests: each ' +
+      'send picks one at random and the result is attributed to it. dmText is ' +
+      'always variant A.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3, { message: 'Up to 3 alternatives (4 variants in total)' })
+  @IsString({ each: true })
+  @MaxLength(1000, { each: true })
+  dmVariants?: string[];
+
   @ApiPropertyOptional({ description: 'Optional public reply posted under the comment' })
   @IsOptional()
   @IsString()

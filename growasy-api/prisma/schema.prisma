@@ -728,11 +728,15 @@ model ProcessedComment {
   matched            Boolean  @default(false)
   dmSent             Boolean  @default(false)
   outcome            String?  @db.VarChar(32) // no_match | matched | rate_limited | dm_sent | failed | needs_reconnect
+  /// Which A/B variant of the DM was sent (A, B, …). Null when the rule has
+  /// a single message, which is every rule until an alternative is added.
+  variantId          String?  @db.VarChar(8)
   errorMessage       String?  @db.VarChar(1000)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   @@index([commenterId, ruleId, createdAt])
+  @@index([ruleId, variantId])
   @@index([instagramAccountId])
 }
 
@@ -751,6 +755,9 @@ model PendingLeadCapture {
   status             String   @default("AWAITING") @db.VarChar(16) // AWAITING | COMPLETED | EXPIRED
   attempts           Int      @default(0)
   capturedEmail      String?  @db.VarChar(255)
+  /// Carried from the DM that opened this capture, so a completed capture can be
+  /// attributed to the variant that earned it.
+  variantId          String?  @db.VarChar(8)
   expiresAt          DateTime
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

@@ -16,6 +16,8 @@ export const automationRuleSchema = z
     matchType: z.enum(['CONTAINS', 'EXACT', 'STARTS_WITH', 'ANY', 'REGEX']),
     keywords: z.string().max(2000).optional().default(''),
     dmText: z.string().min(1, 'Write the DM to send').max(1000),
+    /** Alternative wordings, one per line. Blank lines are dropped on submit. */
+    dmVariants: z.string().max(3000).optional().default(''),
     replyText: z.string().max(1000).optional().default(''),
     /** Posts/reels the rule is limited to. Empty = every post on the account. */
     mediaIds: z.array(z.string().max(64)).max(100).optional().default([]),
