@@ -100,6 +100,11 @@ export interface ProcessInstagramMessageJob {
   text: string;
   senderId: string;
   isStoryReply: boolean;
+  /**
+   * The sender tagged the business in THEIR story (a reshare), as opposed to
+   * replying to one of ours. Carries no text, so keyword matching doesn't apply.
+   */
+  isStoryMention?: boolean;
   instagramBusinessAccountId: string;
   rawEventTimestamp: number;
 }

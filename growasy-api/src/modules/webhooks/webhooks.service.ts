@@ -161,12 +161,21 @@ export class WebhooksService {
     businessAccountId: string,
     timestamp: number | undefined,
   ): ProcessInstagramMessageJob | null {
-    if (!message?.mid || message.is_echo || !message.text) return null;
+    if (!message?.mid || message.is_echo) return null;
+
+    // Someone tagged the business in their own story. This is the reshare signal
+    // worth rewarding, and it arrives with no text — so the "must have text"
+    // rule below would silently drop every one of them.
+    const isStoryMention = (message.attachments ?? []).some((a) => a.type === 'story_mention');
+
+    if (!message.text && !isStoryMention) return null;
+
     return {
       messageId: message.mid,
-      text: message.text,
+      text: message.text ?? '',
       senderId: senderId ?? '',
       isStoryReply: Boolean(message.reply_to?.story),
+      isStoryMention,
       instagramBusinessAccountId: businessAccountId,
       rawEventTimestamp: timestamp ?? Date.now(),
     };

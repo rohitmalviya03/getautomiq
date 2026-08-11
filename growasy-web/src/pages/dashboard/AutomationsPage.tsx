@@ -45,12 +45,18 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string; hint: string }[] = [
   { value: 'COMMENT_KEYWORD', label: 'Comment', hint: 'On a post or reel' },
   { value: 'DM_KEYWORD', label: 'Direct message', hint: 'Someone DMs you' },
   { value: 'STORY_REPLY', label: 'Story reply', hint: 'Reply to your story' },
+  {
+    value: 'STORY_MENTION',
+    label: 'Story mention',
+    hint: 'They reshare your post — no keyword needed',
+  },
 ];
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
   COMMENT_KEYWORD: 'Comment',
   DM_KEYWORD: 'DM',
   STORY_REPLY: 'Story reply',
+  STORY_MENTION: 'Story mention',
 };
 
 const MATCH_TYPE_OPTIONS: { value: AutomationFormValues['matchType']; label: string }[] = [

@@ -11,7 +11,7 @@ export const automationRuleSchema = z
     instagramAccountId: z.string().min(1, 'Choose an Instagram account'),
     name: z.string().min(1, 'Give this automation a name').max(255),
     triggerTypes: z
-      .array(z.enum(['COMMENT_KEYWORD', 'DM_KEYWORD', 'STORY_REPLY']))
+      .array(z.enum(['COMMENT_KEYWORD', 'DM_KEYWORD', 'STORY_REPLY', 'STORY_MENTION']))
       .min(1, 'Pick at least one trigger source'),
     matchType: z.enum(['CONTAINS', 'EXACT', 'STARTS_WITH', 'ANY', 'REGEX']),
     keywords: z.string().max(2000).optional().default(''),

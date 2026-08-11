@@ -19,6 +19,13 @@ export interface InstagramInboundMessage {
   text?: string;
   is_echo?: boolean; // true for messages the business itself sent — ignore
   reply_to?: { story?: { id: string; url?: string }; mid?: string };
+  /**
+   * Media riding along with the message. A story MENTION (someone tagged the
+   * business in their own story) arrives here as `type: "story_mention"` and
+   * usually carries NO text at all — which is why it has to be recognised
+   * explicitly rather than treated as an ordinary message.
+   */
+  attachments?: Array<{ type?: string; payload?: { url?: string } }>;
 }
 
 /** One incoming-message event under entry[].messaging[] (Messenger-style shape). */

@@ -226,6 +226,102 @@ describe('processWebhookComment', () => {
     expect(await matchedAgainst({ mediaIds: ['m-1'] }, null)).toBe(false);
   });
 
+  // --- story mentions ---------------------------------------------------------
+  // Someone resharing our post to their story is the reach signal worth
+  // rewarding. It arrives as a message with no text, so it needs its own path.
+
+  function storyMentionRule() {
+    return {
+      id: 'rule-sm',
+      priority: 0,
+      triggers: [
+        {
+          type: 'STORY_MENTION',
+          matchType: 'CONTAINS',
+          keywords: JSON.stringify([]),
+          config: JSON.stringify({}),
+        },
+      ],
+    };
+  }
+
+  it('fires a STORY_MENTION rule on a mention with no text', async () => {
+    const prisma = makePrisma({
+      automationRule: { findMany: vi.fn().mockResolvedValue([storyMentionRule()]) },
+    });
+    const automationQueue = makeQueue();
+
+    await processWebhookMessage(
+      {
+        messageId: 'mid-1',
+        text: '',
+        senderId: 'user-9',
+        isStoryReply: false,
+        isStoryMention: true,
+        instagramBusinessAccountId: 'ig-biz-1',
+        rawEventTimestamp: 1700000000,
+      },
+      deps(prisma, automationQueue),
+    );
+
+    expect(automationQueue.add).toHaveBeenCalled();
+  });
+
+  it('does not fire a DM_KEYWORD rule on a story mention', async () => {
+    const dmRule = {
+      id: 'rule-dm',
+      priority: 0,
+      triggers: [
+        {
+          type: 'DM_KEYWORD',
+          matchType: 'ANY',
+          keywords: JSON.stringify([]),
+          config: JSON.stringify({}),
+        },
+      ],
+    };
+    const prisma = makePrisma({
+      automationRule: { findMany: vi.fn().mockResolvedValue([dmRule]) },
+    });
+    const automationQueue = makeQueue();
+
+    await processWebhookMessage(
+      {
+        messageId: 'mid-2',
+        text: '',
+        senderId: 'user-9',
+        isStoryReply: false,
+        isStoryMention: true,
+        instagramBusinessAccountId: 'ig-biz-1',
+        rawEventTimestamp: 1700000000,
+      },
+      deps(prisma, automationQueue),
+    );
+
+    expect(automationQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('does not fire a STORY_MENTION rule on an ordinary DM', async () => {
+    const prisma = makePrisma({
+      automationRule: { findMany: vi.fn().mockResolvedValue([storyMentionRule()]) },
+    });
+    const automationQueue = makeQueue();
+
+    await processWebhookMessage(
+      {
+        messageId: 'mid-3',
+        text: 'hello there',
+        senderId: 'user-9',
+        isStoryReply: false,
+        instagramBusinessAccountId: 'ig-biz-1',
+        rawEventTimestamp: 1700000000,
+      },
+      deps(prisma, automationQueue),
+    );
+
+    expect(automationQueue.add).not.toHaveBeenCalled();
+  });
+
   it('skips accounts that are not CONNECTED', async () => {
     const prisma = makePrisma({
       instagramAccount: {

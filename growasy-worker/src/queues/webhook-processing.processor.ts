@@ -289,6 +289,9 @@ export async function processWebhookMessage(
 ): Promise<void> {
   const { prisma, automationQueue } = deps;
   const { messageId, text, senderId, isStoryReply, instagramBusinessAccountId } = job;
+  // A reshare of our content, not a message to us — it skips opt-out and
+  // lead-capture interception, both of which expect actual text.
+  const isStoryMention = Boolean(job.isStoryMention);
 
   // Dedup — keyed on a 'msg:'-namespaced hash (the mid is too long to uniquely
   // index raw, and namespacing keeps it from colliding with a comment id).
@@ -368,7 +371,7 @@ export async function processWebhookMessage(
 
   // Opt-out: a "STOP"/"unsubscribe" DM unsubscribes the contact so no rule ever
   // DMs them again. Honored before anything else (even lead capture).
-  if (!isStoryReply && isOptOut(text)) {
+  if (!isStoryReply && !isStoryMention && isOptOut(text)) {
     const created = await recordProcessed(prisma, dedupKey, {
       commentId: messageId,
       commenterId: senderId,
@@ -470,7 +473,7 @@ export async function processWebhookMessage(
     include: { triggers: true },
     orderBy: { priority: 'desc' },
   });
-  const matchedRule = rules.find((rule) => messageRuleMatches(rule, text, isStoryReply));
+  const matchedRule = rules.find((rule) => messageRuleMatches(rule, text, isStoryReply, isStoryMention));
 
   if (!matchedRule) {
     logOutcome({ ...logBase, outcome: 'no_match' });
@@ -616,8 +619,15 @@ function messageRuleMatches(
   rule: RuleWithTriggers,
   text: string,
   isStoryReply: boolean,
+  isStoryMention = false,
 ): boolean {
   return rule.triggers.some((trigger) => {
+    // A story mention is a reshare of OUR content, not a message to us. It has
+    // no text, so keywords can't apply — the mention itself is the trigger, and
+    // no other trigger type should fire on it.
+    if (isStoryMention) return trigger.type === 'STORY_MENTION';
+    if (trigger.type === 'STORY_MENTION') return false;
+
     // DM_KEYWORD fires on direct DMs only; STORY_REPLY on story replies only.
     const applies =
       (trigger.type === 'DM_KEYWORD' && !isStoryReply) ||

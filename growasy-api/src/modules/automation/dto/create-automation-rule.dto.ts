@@ -18,7 +18,14 @@ import {
 import { TriggerMatchType, AutomationStatus } from '@prisma/client';
 
 /** Trigger sources the engine currently supports (a rule may use one or many). */
-export const SUPPORTED_TRIGGER_TYPES = ['COMMENT_KEYWORD', 'DM_KEYWORD', 'STORY_REPLY'] as const;
+export const SUPPORTED_TRIGGER_TYPES = [
+  'COMMENT_KEYWORD',
+  'DM_KEYWORD',
+  'STORY_REPLY',
+  // Someone reshared our content to their story and tagged us. No text, so the
+  // mention itself is the trigger — keywords don't apply.
+  'STORY_MENTION',
+] as const;
 export type SupportedTriggerType = (typeof SUPPORTED_TRIGGER_TYPES)[number];
 
 export class CreateAutomationRuleDto {

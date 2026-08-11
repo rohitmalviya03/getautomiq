@@ -140,7 +140,7 @@ export interface InstagramMedia {
 export type TriggerMatchType = 'ANY' | 'EXACT' | 'STARTS_WITH' | 'CONTAINS' | 'REGEX';
 export type AutomationStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
 /** Trigger source: a post/reel comment, a direct message, or a story reply. */
-export type TriggerType = 'COMMENT_KEYWORD' | 'DM_KEYWORD' | 'STORY_REPLY';
+export type TriggerType = 'COMMENT_KEYWORD' | 'DM_KEYWORD' | 'STORY_REPLY' | 'STORY_MENTION';
 
 /** Flattened rule shape returned by /automations/rules. */
 export interface AutomationRule {
