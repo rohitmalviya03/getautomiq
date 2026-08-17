@@ -2,6 +2,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
 
 import type { EnvConfig } from '../config/env';
 import { logger } from '../logger/logger';
+import { adminMessageEmailTemplate } from './templates/admin-message-email.template';
 import { passwordResetEmailTemplate } from './templates/password-reset-email.template';
 import { planExpiredEmailTemplate } from './templates/plan-expired-email.template';
 import { planExpiringEmailTemplate } from './templates/plan-expiring-email.template';
@@ -77,6 +78,20 @@ export class MailService {
     planName: string;
   }): Promise<void> {
     const { subject, html, text } = planExpiredEmailTemplate({ ...payload, appUrl: this.appUrl });
+    await this.deliver(payload.toEmail, subject, html, text);
+  }
+
+  /** A message an admin typed in the console. `body` is plain text by contract. */
+  async sendAdminMessageEmail(payload: {
+    toEmail: string;
+    firstName: string;
+    subject: string;
+    body: string;
+  }): Promise<void> {
+    const { subject, html, text } = adminMessageEmailTemplate({
+      ...payload,
+      appUrl: this.appUrl,
+    });
     await this.deliver(payload.toEmail, subject, html, text);
   }
 

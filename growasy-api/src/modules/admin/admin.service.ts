@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, AuditAction, SubscriptionStatus, BillingCycle, OrgPlanTier } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailQueueService } from '../../queues/mail-queue.service';
 import { AuthenticatedUser } from '../../common/types/jwt-payload.type';
 import { ChangePlanDto, SetActiveDto, SetSuperAdminDto } from './dto/admin.dto';
 
@@ -26,7 +27,10 @@ function monthlyEquivalent(plan: { monthlyPrice: number; yearlyPrice: number }, 
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailQueue: MailQueueService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Overview / metrics
@@ -644,6 +648,55 @@ export class AdminService {
       after: { title: dto.title },
     });
     return notification;
+  }
+
+  /**
+   * Emails the customer directly from the console.
+   *
+   * Goes to the workspace owner, because that is the person who signed up and
+   * whose address we have verified. The mail is queued rather than sent inline:
+   * SMTP is slow and occasionally down, and an admin should not watch a spinner
+   * — or get a 500 and re-send — because a mail server was busy.
+   *
+   * The audit records the subject only. Support messages routinely contain
+   * account details a customer told us in confidence, and the audit log is read
+   * far more widely than the outbox.
+   */
+  async emailCustomer(
+    orgId: string,
+    dto: { subject: string; body: string },
+    actor: AuthenticatedUser,
+    meta: AdminActionMeta,
+  ) {
+    const org = await this.prisma.organization.findFirst({
+      where: { id: orgId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        owner: { select: { id: true, email: true, firstName: true } },
+      },
+    });
+    if (!org) throw new NotFoundException('Customer not found');
+    if (!org.owner?.email) {
+      throw new BadRequestException('This customer has no owner email to write to.');
+    }
+
+    await this.mailQueue.sendAdminMessageEmail({
+      toEmail: org.owner.email,
+      firstName: org.owner.firstName,
+      subject: dto.subject.trim(),
+      body: dto.body.trim(),
+    });
+
+    await this.audit(actor, meta, {
+      action: AuditAction.OTHER,
+      entityType: 'Organization',
+      entityId: orgId,
+      organizationId: orgId,
+      after: { emailedCustomer: true, subject: dto.subject.trim() },
+    });
+
+    return { queued: true as const, to: org.owner.email };
   }
 
   /** Force-disconnect a customer's Instagram account (e.g. a broken/leaked token). */

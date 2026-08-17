@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Wrench, RotateCcw, Gift, CalendarClock, Send, MailCheck } from 'lucide-react';
+import { Wrench, RotateCcw, Gift, CalendarClock, Send, MailCheck, Mail } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Label } from '@/components/ui/Input';
@@ -32,6 +32,8 @@ export function AdminActionsCard({
   const [compDays, setCompDays] = useState(30);
   const [msgTitle, setMsgTitle] = useState('');
   const [msgBody, setMsgBody] = useState('');
+  const [mailSubject, setMailSubject] = useState('');
+  const [mailBody, setMailBody] = useState('');
 
   const resetUsage = useMutation({
     mutationFn: () => adminApi.adjustUsage(customerId, { action: 'reset' }),
@@ -57,6 +59,20 @@ export function AdminActionsCard({
     },
     onError: onErr,
   });
+  const sendEmail = useMutation({
+    mutationFn: () =>
+      adminApi.emailCustomer(customerId, {
+        subject: mailSubject.trim(),
+        body: mailBody.trim(),
+      }),
+    onSuccess: ({ to }) => {
+      setMailSubject('');
+      setMailBody('');
+      showToast({ variant: 'success', title: 'Email queued', description: `Sending to ${to}` });
+    },
+    onError: onErr,
+  });
+
   const notify = useMutation({
     mutationFn: () => adminApi.notifyCustomer(customerId, { title: msgTitle.trim(), body: msgBody.trim() || undefined }),
     onSuccess: () => {
@@ -162,6 +178,51 @@ export function AdminActionsCard({
           >
             <Send className="h-4 w-4" /> Send notification
           </Button>
+        </div>
+
+        {/* Email — leaves the app and lands in the owner's inbox, unlike the
+            in-app notification above. */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            Email the customer
+          </p>
+          <div>
+            <Label htmlFor="mailSubject">Subject</Label>
+            <Input
+              id="mailSubject"
+              value={mailSubject}
+              onChange={(e) => setMailSubject(e.target.value)}
+              placeholder="About your Automiq account"
+              maxLength={200}
+            />
+          </div>
+          <div>
+            <Label htmlFor="mailBody">Message</Label>
+            <textarea
+              id="mailBody"
+              value={mailBody}
+              onChange={(e) => setMailBody(e.target.value)}
+              placeholder="Write the message. Leave a blank line to start a new paragraph."
+              rows={5}
+              maxLength={5000}
+              className="focus-ring w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              disabled={
+                mailSubject.trim().length < 3 || !mailBody.trim() || sendEmail.isPending
+              }
+              isLoading={sendEmail.isPending}
+              onClick={() => sendEmail.mutate()}
+            >
+              <Mail className="h-4 w-4" /> Send email
+            </Button>
+            <span className="text-xs text-slate-400">
+              Goes to the workspace owner. Replies come back to us.
+            </span>
+          </div>
         </div>
       </CardContent>
     </Card>

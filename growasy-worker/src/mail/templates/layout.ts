@@ -3,6 +3,8 @@
  * place means every email looks consistent and table-based markup (for
  * maximum email-client compatibility) only has to be gotten right once.
  */
+import { escapeHtml } from './escape-html';
+
 export function renderLayout(options: {
   preheader: string;
   heading: string;
@@ -11,6 +13,12 @@ export function renderLayout(options: {
   ctaUrl?: string;
 }): string {
   const { preheader, heading, bodyHtml, ctaLabel, ctaUrl } = options;
+
+  // `preheader` is escaped here rather than at each call site. Most callers pass
+  // a fixed sentence, but the admin-message template derives it from text a
+  // human typed — escaping at the boundary means no future caller has to
+  // remember. `heading` and `bodyHtml` are the caller's job: they legitimately
+  // carry markup, so they are escaped where they are built.
 
   const button =
     ctaLabel && ctaUrl
@@ -44,7 +52,7 @@ export function renderLayout(options: {
     <title>${heading}</title>
   </head>
   <body style="margin:0;padding:0;background-color:#f4f4f7;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${preheader}</div>
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7;padding:24px 0;">
       <tr>
         <td align="center">

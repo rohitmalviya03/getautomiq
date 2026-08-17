@@ -293,6 +293,9 @@ export const adminApi = {
     apiClient.post(`/admin/customers/${id}/comp`, body),
   notifyCustomer: (id: string, body: { title: string; body?: string }) =>
     apiClient.post(`/admin/customers/${id}/notify`, body),
+  /** Sends a real email to the workspace owner (queued server-side). */
+  emailCustomer: (id: string, body: { subject: string; body: string }) =>
+    apiClient.post<{ queued: true; to: string }>(`/admin/customers/${id}/email`, body),
   disconnectAccount: (id: string, accountId: string) =>
     apiClient.post(`/admin/customers/${id}/accounts/${accountId}/disconnect`),
   verifyEmail: (userId: string) => apiClient.post(`/admin/users/${userId}/verify-email`),

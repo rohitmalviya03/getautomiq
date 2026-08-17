@@ -32,7 +32,20 @@ export const MAIL_JOB_NAMES = {
   SEND_WELCOME_EMAIL: 'send-welcome-email',
   SEND_PLAN_EXPIRING_EMAIL: 'send-plan-expiring-email',
   SEND_PLAN_EXPIRED_EMAIL: 'send-plan-expired-email',
+  SEND_ADMIN_MESSAGE_EMAIL: 'send-admin-message-email',
 } as const;
+
+/**
+ * A message an admin typed by hand in the console and sent to a customer.
+ * `body` is plain text, never HTML — the template escapes it, so nothing an
+ * admin pastes can inject markup into the customer's inbox.
+ */
+export interface SendAdminMessageEmailJob {
+  toEmail: string;
+  firstName: string;
+  subject: string;
+  body: string;
+}
 
 export interface SendVerificationEmailJob {
   toEmail: string;

@@ -6,6 +6,7 @@ import {
   QUEUE_NAMES,
   SendPasswordResetEmailJob,
   SendPlanExpiredEmailJob,
+  SendAdminMessageEmailJob,
   SendPlanExpiringEmailJob,
   SendVerificationEmailJob,
   SendWelcomeEmailJob,
@@ -61,6 +62,17 @@ export class MailQueueService implements OnModuleDestroy {
   async sendPlanExpiredEmail(payload: SendPlanExpiredEmailJob, dedupeKey: string) {
     await this.queue.add(MAIL_JOB_NAMES.SEND_PLAN_EXPIRED_EMAIL, payload, {
       jobId: `plan-expired-${dedupeKey}`,
+    });
+  }
+
+  /**
+   * A one-off message an admin wrote to a customer. No dedupe key: unlike the
+   * lifecycle mails above, sending the same subject twice is a deliberate act
+   * (a follow-up), not a duplicate to be swallowed.
+   */
+  async sendAdminMessageEmail(payload: SendAdminMessageEmailJob) {
+    await this.queue.add(MAIL_JOB_NAMES.SEND_ADMIN_MESSAGE_EMAIL, payload, {
+      jobId: `admin-msg-${payload.toEmail}-${Date.now()}`,
     });
   }
 

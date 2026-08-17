@@ -25,6 +25,7 @@ import {
   AdminListQueryDto,
   ChangePlanDto,
   CompPlanDto,
+  EmailCustomerDto,
   NotifyCustomerDto,
   SetActiveDto,
   SetSuperAdminDto,
@@ -147,6 +148,18 @@ export class AdminController {
     @Req() req: Request,
   ) {
     return this.admin.notifyCustomer(id, dto, actor, this.meta(req));
+  }
+
+  /** Send the customer a real email (goes out via the mail queue). */
+  @Post('customers/:id/email')
+  @HttpCode(HttpStatus.OK)
+  emailCustomer(
+    @Param('id') id: string,
+    @Body() dto: EmailCustomerDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.admin.emailCustomer(id, dto, actor, this.meta(req));
   }
 
   @Post('customers/:id/accounts/:accountId/disconnect')

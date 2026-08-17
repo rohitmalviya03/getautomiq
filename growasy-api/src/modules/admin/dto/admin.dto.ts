@@ -10,6 +10,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import { OrgPlanTier, SubscriptionStatus, BillingCycle } from '@prisma/client';
 
@@ -134,6 +135,22 @@ export class CompPlanDto {
 }
 
 /** Send an in-app notification to a customer's owner. */
+/** A message an admin writes to a customer. Plain text — the email template
+ *  escapes the body, so markup is never interpreted. */
+export class EmailCustomerDto {
+  @ApiProperty({ description: 'Subject line the customer sees in their inbox' })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(200)
+  subject!: string;
+
+  @ApiProperty({ description: 'Message body. Blank lines become paragraphs.' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  body!: string;
+}
+
 export class NotifyCustomerDto {
   @ApiProperty()
   @IsString()

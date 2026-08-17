@@ -5,6 +5,7 @@ import type { MailService } from '../mail/mail.service';
 import {
   MAIL_JOB_NAMES,
   QUEUE_NAMES,
+  type SendAdminMessageEmailJob,
   type SendPasswordResetEmailJob,
   type SendPlanExpiredEmailJob,
   type SendPlanExpiringEmailJob,
@@ -43,6 +44,11 @@ export async function dispatchMailJob(job: Job, mailService: MailService): Promi
     case MAIL_JOB_NAMES.SEND_PLAN_EXPIRED_EMAIL: {
       const data = job.data as SendPlanExpiredEmailJob;
       await mailService.sendPlanExpiredEmail(data);
+      return;
+    }
+    case MAIL_JOB_NAMES.SEND_ADMIN_MESSAGE_EMAIL: {
+      const data = job.data as SendAdminMessageEmailJob;
+      await mailService.sendAdminMessageEmail(data);
       return;
     }
     default: {
